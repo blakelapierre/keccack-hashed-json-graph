@@ -3,16 +3,72 @@ import style from './style';
 
 import keccak from '../../lib/keccak.js';
 
+console.log(keccak('test'));
+
+const Raw =
+  ({hash, data}) => (
+    <raw>
+      <table>
+        <tbody>
+          <tr>
+            <td className={style['label']}>Data</td>
+            <td><data>{data}</data></td>
+          </tr>
+          <tr>
+            <td className={style['label']}>Hash</td>
+            <td><hash>{hash}</hash></td>
+          </tr>
+        </tbody>
+      </table>
+    </raw>
+  );
+
 const Text = ({text}) => <text>{text}</text>;
 const TextJSON = ({text, json}) => <text-json><text>{text}</text><json>{json}</json></text-json>;
 const HashTextJSON = ({hash, text, json}) => <hash-text-json><text>{text}</text><json>{json}</json><hash>{hash}</hash></hash-text-json>;
 // const HashBucket = ({hash, children}) => <hash-bucket><hash>{hash}</hash>{...children}</hash-bucket>;
 
+function get(url) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open('GET', url);
+    xhr.addEventListener('load', () => resolve(xhr.responseText));
+    xhr.addEventListener('error', reject);
+    xhr.addEventListener('timeout', reject);
+    xhr.send();
+  });
+}
+
+function post(url, data) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open('POST', url);
+    xhr.addEventListener('load', () => resolve(xhr.responseText));
+    xhr.addEventListener('error', reject);
+    xhr.addEventListener('timeout', reject);
+    xhr.send(data);
+  });
+}
+
+function getLatest() {
+  return get('http://localhost:9999/keccak/latest');
+}
+
+function getContent(hash) {
+  return get(`http://localhost:9999/keccak/${hash}`);
+}
+
+function postLookup(hashes) {
+  return post(`http://localhost:9999/keccak/lookup`, hashes);
+}
+
 const transforms = {
   addData(hash, data, state) {
     const bucket = state.data[hash] = state.data[hash] || [];
     for (let i = 0; i < bucket.length; i++)
-      if (JSON.stringify(bucket[i]) === JSON.stringify(data))
+      if (bucket[i] === data)
         return state;
 
     bucket.push(data);
@@ -21,8 +77,170 @@ const transforms = {
   }
 };
 
-function makeFullyHashed() {
 
+export default class Home extends Component {
+  state = {
+    data: {}
+  }
+
+  constructor() {
+    super();
+
+    const home = this;
+
+    getLatest()
+      .then(latest => {
+        return latest.split('\n').reduce((promise, hash) => {
+          return promise
+                  .then(() => getContent(hash))
+                  .then(data => home.setState.call(home, transforms['addData'].bind(home, hash, data)));
+        }, Promise.resolve());
+        // return postLookup(latest
+        //             .split('\n')
+        //             .map(line => line.split(',')[1])
+        //             .join('\n') + '\n');
+      })
+      .catch(error => console.log('Get latest error!', error));
+  }
+
+  onTextAdd(text) {
+    // const {hash, json} = hashObject({text});
+    const {hashes, objects, jsons} = makeFullyHashed({text});
+
+    for (let i = 0; i < hashes.length; i++) {
+      console.log('settings', text, hashes[i], objects[i], jsons[i]);
+      const xhr = new XMLHttpRequest();
+      const hash = hashes[i].substring(7),
+            json = jsons[i];
+
+      xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
+      xhr.send(json);
+
+      this.setState(transforms['addData'].bind(this, hash, json));
+    }
+
+    return hashes;
+  }
+
+  onTextTagsAdd(text, tags = []) {
+    // const hashed = {text: this.onTextAdd.call(this, text), tags: tags.map(tag => this.onTextAdd.call(this, tag.trim()))},
+    //       {hashes, jsons} = makeFullyHashed(hashed);
+    const hashed = {text, tags},
+          {hash, json} = hashObject(hashed),
+          hashes = [hash],
+          jsons = [json];
+          // {hashes, jsons} = makeFullyHashed({text, tags});
+
+    for (let i = 0; i < hashes.length; i++) {
+      console.log('setting', text, hashes[i], jsons[i]);
+      const xhr = new XMLHttpRequest();
+      const hash = hashes[i].substring(7),
+            json = jsons[i];
+
+      xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
+      xhr.send(json);
+
+      this.setState(transforms['addData'].bind(this, hash, json));
+    }
+    // this.setState(transforms['addData'].bind(this, hash, json));
+  }
+
+
+          //<data>{Object.keys(data).map(k => data[k].map(d => <HashTextJSON hash={k} {...makeFullyUnhashed(data, d)} />))}</data>
+  render({text, tags}, {data}) {
+    return (
+      <home>
+        <TabPanel>
+          <container
+            header="Raw">
+            <data>{Object.keys(data).map(k => data[k].map(d => <Raw hash={k} data={d} />))}</data>
+          </container>
+        </TabPanel>
+
+        <TextTagsInput text={text} tags={tags} onAdd={this.onTextTagsAdd.bind(this)} />
+      </home>
+    );
+  }
+}
+
+// {
+//   hash,
+//   data,
+//   json,
+//   object
+// }
+
+const TextInput = ({text, onAdd}) => (
+  <text-input>
+    <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
+    <button onClick={() => onAdd(this.textarea.value)}>Add</button>
+  </text-input>
+);
+
+const TextTagsInput = ({text, tags, onAdd}) => (
+  <text-input>
+    <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
+    <textarea value={tags} ref={el => this.tags = el}></textarea>
+    <button onClick={() => onAdd(this.textarea.value, this.tags.value.length > 0 ? this.tags.value.split(',') : undefined)}>Add</button>
+  </text-input>
+);
+
+
+const makeHashString = data => `keccak:${keccak(data)}`;
+
+function hashObject(obj) {
+  const json = JSON.stringify(obj),
+        hash = makeHashString(json);
+
+  return {hash, json};
+}
+
+function makeFullyHashed(object) {
+  const hashes = [],
+        objects = [object],
+        jsons = [];
+
+  console.log('fully hashing', object);
+
+  const {hash, json} = hashObject(Object.keys(object).reduce((hashed, key) => {
+    const value = object[key];
+console.log(key, value, typeof value);
+    if (typeof value === 'string') {
+      console.log('got string', value);
+      const hash = makeHashString(value);
+      hashed[key] = hash;
+      hashes.push(hash);
+      objects.push(value);
+      jsons.push(undefined);
+    }
+    else if (Array.isArray(value)) {
+      console.log('got array');
+      const {hashes: h, objects: o, jsons: j} = makeFullyHashed(value);
+      hashed[key] = hash;
+      // hashes.push(hash);
+      hashes.push(...h);
+      objects.push(...o);
+      jsons.push(...j);
+    }
+    else if (typeof value === 'object') {
+      console.log('got object')
+      const {hashes: h, objects: o, jsons: j} = makeFullyHashed(value);
+      hashed[key] = hash;
+      // hashes.push(hash);
+      hashes.push(...h);
+      objects.push(...o);
+      jsons.push(...j);
+    }
+
+    return hashed;
+  }, {}));
+
+  hashes.unshift(hash);
+  jsons.unshift(json);
+
+  console.log('hash', hashes, objects, jsons);
+
+  return {hashes, objects, jsons};
 }
 
 function makeFullyUnhashed(data, hashed, key) {
@@ -40,60 +258,38 @@ function makeFullyUnhashed(data, hashed, key) {
   }
 }
 
-export default class Home extends Component {
-  state = {
-    data: {}
-  }
+function unhashJSONToDepth(data, hashed, max_depth, depth = 0) {
 
-  onTextAdd(text) {
-    const {hash, json} = hashObject({text});
-
-    this.setState(transforms['addData'].bind(this, hash, {text, json}));
-
-    return hash;
-  }
-
-  onTextTagsAdd(text, tags = []) {
-    const hashed = {text: this.onTextAdd.call(this, text), tags: tags.map(tag => this.onTextAdd.call(this, tag.trim()))},
-          {hash, json} = hashObject(hashed);
-
-    this.setState(transforms['addData'].bind(this, hash, {...hashed, json}));
-  }
-
-  render({text, tags}, {data}) {
-    return (
-      <home>
-        <container>
-          <data>{Object.keys(data).map(k => data[k].map(d => <HashTextJSON hash={k} {...makeFullyUnhashed(data, d)} />))}</data>
-        </container>
-
-        <TextTagsInput text={text} tags={tags} onAdd={this.onTextTagsAdd.bind(this)} />
-      </home>
-    );
-  }
 }
 
-const TextInput = ({text, onAdd}) => (
-  <text-input>
-    <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
-    <button onClick={() => onAdd(this.textarea.value)}>Add</button>
-  </text-input>
-);
+function unhashJSONToDepthWithHandlers(data, handlers, hashed, max_depth, depth = 0) {
 
-const TextTagsInput = ({text, tags, onAdd}) => (
-  <text-input>
-    <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
-    <textarea value={tags} ref={el => this.tags = el}></textarea>
-    <button onClick={() => onAdd(this.textarea.value, this.tags.value.split(','))}>Add</button>
-  </text-input>
-);
+}
 
+class TabPanel extends Component {
+  constructor(props) {
+    super(props);
 
-function hashObject(obj) {
-  const json = JSON.stringify(obj),
-        hash = `keccak:${keccak(json)}`;
+    this.state = {
+      selected: 0
+    };
+  }
 
-  return {hash, json};
+  render({children, className}) {
+    const {selected} = this.state;
+    return (
+      <tab-panel className={style[className]}>
+        {children[selected]}
+        <panels>
+          {children.map(({attributes: { header }}, i) =>
+            <selector
+              className={selected === i ? style['selected'] : ''}
+              onClick={() => this.setState({selected: i})}
+              >{header}</selector>)}
+        </panels>
+      </tab-panel>
+    );
+  }
 }
 
 
@@ -125,3 +321,40 @@ function hashObject(obj) {
 // {text: 'this is some text', author: 'public_key'}
 
 // {text: 'this is some text', author: 'public_key', created_at: new DateTime().getTimeUTC()}
+
+
+
+function Server() {
+  const addIndex = ({indices}, hash) => indices[hash] = [],
+        addIndexOn = {};
+
+}
+
+// text
+// json:reference
+
+
+// organization
+//   budgets?
+//   tasks?
+//   goals?
+//   projects?
+//   payments
+//     bitcoin
+//     dollars
+
+// messageboard : organization
+//   text
+//   tags
+//   references
+//   author
+//   signature
+
+// reference
+//   data
+//   position
+//   length
+
+// tag
+//   text
+//   referece

@@ -6,44 +6,94 @@ home {
   justify-content: center;
   align-items: center;
 
-  container {
+  tab-panel {
     flex: 1 1 auto;
 
     display: flex;
+    flex-direction: column;
 
-    max-width: 50%;
+    justify-content: center;
+    align-items: center;
 
-    // overflow: hidden;
+    panels {
+      selector {
+        font-size: 0.55rem;
+        font-weight: bold;
 
-    data {
+        &.selected {
+          background-color: rgba(127, 127, 127, 0.5);
+        }
+      }
+    }
+
+    container {
       flex: 1 1 auto;
 
-      overflow: auto;
+      display: flex;
 
-      word-break: break-all;
+      max-width: 50%;
 
-      hash-text-json {
-        flex: 0 1 auto;
+      // overflow: hidden;
 
-        display: flex;
-        flex-direction: column;
+      data {
+        flex: 1 1 auto;
 
-        &:hover {
-          background-color: rgba(127, 127, 127, 0.2);
-        }
+        overflow: auto;
 
-        hash {
-          font-size: 0.75em;
+        word-break: break-all;
+
+        raw {
+          flex: 0 1 auto;
+
+          display: flex;
+          flex-direction: column;
+
           font-family: monospace;
 
-          background-color: rgba(127, 127, 127, 0.25);
+          .label {
+            font-size: 0.35rem;
+            font-weight: bold;
+          }
+
+          &:hover {
+            background-color: rgba(127, 127, 127, 0.2);
+          }
+
+          hash {
+            font-size: 0.65em;
+            font-family: monospace;
+
+            background-color: rgba(127, 127, 127, 0.25);
+          }
+
+          data {
+
+          }
         }
 
-        json {
-          font-size: 0.75em;
-          font-family: monospace;
+        hash-text-json {
+          flex: 0 1 auto;
 
-          background-color: rgba(127, 127, 127, 0.1);
+          display: flex;
+          flex-direction: column;
+
+          &:hover {
+            background-color: rgba(127, 127, 127, 0.2);
+          }
+
+          hash {
+            font-size: 0.75em;
+            font-family: monospace;
+
+            background-color: rgba(127, 127, 127, 0.25);
+          }
+
+          json {
+            font-size: 0.75em;
+            font-family: monospace;
+
+            background-color: rgba(127, 127, 127, 0.1);
+          }
         }
       }
     }
