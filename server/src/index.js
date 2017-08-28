@@ -10,7 +10,8 @@ import Router from 'koa-trie-router';
 
 import keccak from './keccak';
 
-const keccakStore = {};
+const keccakStore = {},
+      latest = [];
 
 const port = process.env.port || 9999;
 
@@ -18,8 +19,11 @@ const app = new Koa(),
       router = new Router();
 
 router
-  .get('/keccak/:hash', keccakGet)
-  .post('/keccak/:hash', keccakPost);
+  .get('/keccak/all', keccakGetAll)
+  .get('/keccak/latest', keccakGetLatest)
+  .get('/keccak/:hash', keccakGetHash)
+  .post('/keccak/lookup', keccakPostLookup)
+  .post('/keccak/:hash', keccakPostHash);
 
 app.use(router.middleware());
 
@@ -27,9 +31,22 @@ app.listen(port);
 
 console.log('HTTP server listing on port', port);
 
-
-async function keccakGet (ctx, next) // jshint ignore:line
+async function keccakGetAll (ctx, next) // jshint ignore:line
 {
+
+}
+
+async function keccakGetLatest (ctx, next) // jshint ignore:line
+{
+  ctx.response.set('Access-Control-Allow-Origin', '*');
+
+  ctx.body = latest.map(([_, hash]) => hash).join('\n');
+}
+
+async function keccakGetHash (ctx, next) // jshint ignore:line
+{
+  ctx.response.set('Access-Control-Allow-Origin', '*');
+
   const {hash} = ctx.params,
         store = keccakStore[hash];
 
@@ -39,9 +56,34 @@ async function keccakGet (ctx, next) // jshint ignore:line
     ctx.body = store[0];
   }
   else ctx.response.status = 404;
+
+  return next();
 }
 
-async function keccakPost (ctx, next) // jshint ignore:line
+async function keccakPostLookup (ctx, next) // jshint ignore:line
+{
+  ctx.response.set('Access-Control-Allow-Origin', '*');
+
+  await new Promise((resolve, reject) => { // jshint ignore:line
+    const {req, response} = ctx;
+
+    req.on('data', data => {
+      console.log('lookup', data, response);
+
+      response.body = data.toString('utf16le').split('\n').reduce((body, hash) => {
+        console.log(hash, body);
+        return `${body}${hash} ${keccakStore[hash]}\n`;
+      }, response.body);
+      response.status = 200;
+    });
+
+    req.on('end', resolve);
+  });
+
+  return next();
+}
+
+async function keccakPostHash (ctx, next) // jshint ignore:line
 {
   const {hash} = ctx.params;
 
@@ -69,20 +111,31 @@ async function keccakPost (ctx, next) // jshint ignore:line
       req.on('end', function() {
         const data = Buffer.concat(buffer).toString('utf8');
 
-        if (keccak(data) === hash) {
-          keccakStore[hash] = keccakStore[hash] || [];
-          keccakStore[hash].push(data);
+        if (addToStore(keccakStore, hash, data)) {
           response.status = 200;
           console.log('stored', data);
         }
         else {
-          console.log('data didn\'t match hash!', response.finished);
           response.status = 400;
         }
-        console.log(`${hash} done`);
+
+        console.log({data, hash});
         resolve();
       });
 
     });
   }
+}
+
+function addToStore(store, hash, data) {
+  const dataHash = keccak(data);
+
+  if (dataHash === hash) {
+    keccakStore[hash] = keccakStore[hash] || [];
+    keccakStore[hash].push(data);
+    latest.push([new Date().getTime(), hash]);
+
+    return true;
+  }
+  return false;
 }
