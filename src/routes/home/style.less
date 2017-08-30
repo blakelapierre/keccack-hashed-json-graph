@@ -44,6 +44,14 @@ home {
 
         direction: rtl;
 
+        a {
+          text-decoration: none;
+
+          &:visited {
+            color: initial;
+          }
+        }
+
         raw {
           flex: 0 1 auto;
 
@@ -112,5 +120,14 @@ home {
 
     justify-content: center;
     align-items: center;
+  }
+}
+
+.keccak-link {
+  text-decoration: underline;
+  color: #00e;
+
+  &:visited {
+    color: #00e;
   }
 }

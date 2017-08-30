@@ -31,16 +31,24 @@ const store = {
         .then(resolve)
         .catch(() =>
           lookupInLocalStorage(hash)
+            .then(data => {
+              (store.data[hash] = store.data[hash] || []).push(data);
+              return data;
+            })
             .then(resolve)
             .catch(() =>
               lookupInServer(hash)
+                .then(data => {
+                  (store.data[hash] = store.data[hash] || []).push(data);
+                  return data;
+                })
                 .then(resolve)
                 .catch(reject))))
 };
 
 function lookupInStore(store, hash) {
   return new Promise((resolve, reject) => {
-    const bucket = store[hash];
+    const bucket = store.data[hash];
 
     if (bucket) resolve(bucket[0]);
     reject();

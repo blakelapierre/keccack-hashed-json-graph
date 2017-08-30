@@ -13,7 +13,7 @@ const Raw =
         <tbody>
           <tr>
             <td className={style['label']}>Data</td>
-            <td><data>{data}</data></td>
+            <td><data>{renderKeccakLinks(data)}</data></td>
           </tr>
           <tr>
             <td className={style['label']}>Hash</td>
@@ -23,6 +23,29 @@ const Raw =
       </table>
     </raw>
   );
+
+function renderKeccakLinks(text) {
+  const matches = text.match(/keccak:([0-9a-f]){64}/g),
+        result = [];
+
+  if (!matches) return text;
+
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i],
+          index = text.indexOf(match),
+          prev = text.substring(0, index),
+          hash = text.substring(index, index + 64 + 7);
+
+    result.push(prev);
+    result.push(<Link className={style['keccak-link']} href={`/keccak/${hash.substring(7)}`}>{hash}</Link>);
+
+    text = text.substring(index + 64 + 7);
+  }
+
+  result.push(text);
+
+  return result;
+}
 
 const Text = ({text}) => <text>{text}</text>;
 const TextJSON = ({text, json}) => <text-json><text>{text}</text><json>{json}</json></text-json>;
