@@ -11,6 +11,7 @@ import Router from 'koa-trie-router';
 import keccak from './keccak';
 
 const keccakStore = {},
+      jsonReferences = {},
       latest = [];
 
 const port = process.env.port || 9999;
@@ -18,10 +19,16 @@ const port = process.env.port || 9999;
 const app = new Koa(),
       router = new Router();
 
+app.use((ctx, next) => {
+  ctx.response.set('Access-Control-Allow-Origin', '*');
+  return next();
+});
+
 router
   .get('/keccak/all', keccakGetAll)
   .get('/keccak/latest', keccakGetLatest)
   .get('/keccak/:hash', keccakGetHash)
+  .get('/keccak/json/:key/:hash', keccakGetJsonKeyHash)
   .post('/keccak/lookup', keccakPostLookup)
   .post('/keccak/:hash', keccakPostHash);
 
@@ -39,8 +46,6 @@ async function keccakGetAll (ctx, next) // jshint ignore:line
 const max = 50;
 async function keccakGetLatest (ctx, next) // jshint ignore:line
 {
-  ctx.response.set('Access-Control-Allow-Origin', '*');
-
   const start = Math.max(0, latest.length - max),
         end = Math.max(0, Math.min(start + max, latest.length));
 console.log(start, end);
@@ -50,8 +55,6 @@ console.log(start, end);
 
 async function keccakGetHash (ctx, next) // jshint ignore:line
 {
-  ctx.response.set('Access-Control-Allow-Origin', '*');
-
   const {hash} = ctx.params,
         store = keccakStore[hash];
 
@@ -65,10 +68,26 @@ async function keccakGetHash (ctx, next) // jshint ignore:line
   return next();
 }
 
+async function keccakGetJsonKeyHash(ctx, next) // jshint ignore:line
+{
+  const {key, hash} = ctx.params,
+        references = jsonReferences[hash];
+
+  if (references) {
+    const bucket = references[key];
+
+    if (bucket) {
+      ctx.body = JSON.stringify(bucket);
+      return next();
+    }
+  }
+
+  ctx.response.status = 404;
+  return next();
+}
+
 async function keccakPostLookup (ctx, next) // jshint ignore:line
 {
-  ctx.response.set('Access-Control-Allow-Origin', '*');
-
   await new Promise((resolve, reject) => { // jshint ignore:line
     const {req, response} = ctx;
 
@@ -88,6 +107,8 @@ async function keccakPostLookup (ctx, next) // jshint ignore:line
   return next();
 }
 
+const maxLength = 100000;
+
 async function keccakPostHash (ctx, next) // jshint ignore:line
 {
   const {hash} = ctx.params;
@@ -95,8 +116,6 @@ async function keccakPostHash (ctx, next) // jshint ignore:line
   console.log(hash, 'posting');
 
   const {response, request, req} = ctx;
-
-  response.set('Access-Control-Allow-Origin', '*');
 
   await readAndStore(req, response); // jshint ignore:line
 
@@ -108,16 +127,54 @@ async function keccakPostHash (ctx, next) // jshint ignore:line
 
       let totalLength = 0;
 
-      req.on('data', data => {
+      req.on('data', dataHandler);
+      req.on('end', endHandler);
+
+      function dataHandler(data) {
         console.log('data', data);
         totalLength += data.length;
-        buffer.push(data);
-      });
 
-      req.on('end', function() {
+        if (totalLength > maxLength) {
+          req.off('data', dataHandler);
+          req.off('end', endHandler);
+          reject('Too large! maxLength =', maxLength);
+        }
+
+        buffer.push(data);
+      }
+
+      function endHandler() {
         const data = Buffer.concat(buffer).toString('utf8');
 
         if (keccak(data) === hash) {
+          try {
+            const object = JSON.parse(data);
+
+            if (Array.isArray(object)) {
+
+            }
+            else if (typeof object === 'object') {
+              for (let key in object) {
+                const value = object[key];
+
+                if (typeof value === 'string') {
+                  const match = value.match(/^keccak:([0-9a-f]{64})$/);
+                  if (match) {
+                    console.log('match', match);
+                    const [_, referenceHash] = match,
+                          referenceHashBucket = (jsonReferences[referenceHash] = jsonReferences[referenceHash] || {}),
+                          keyBucket = (referenceHashBucket[key] = referenceHashBucket[key] || []);
+
+                    keyBucket.push(hash);
+
+                    console.dir(jsonReferences);
+                  }
+                }
+              }
+            }
+          }
+          catch (e) {}
+
           addToStore(keccakStore, hash, data);
           response.status = 200;
           console.log('stored', data);
@@ -128,8 +185,7 @@ async function keccakPostHash (ctx, next) // jshint ignore:line
 
         console.log({data, hash});
         resolve();
-      });
-
+      }
     });
   }
 }
