@@ -9,11 +9,13 @@ home {
   tab-panel {
     flex: 1 1 auto;
 
+    max-height: 100%;
+
     display: flex;
     flex-direction: column;
 
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
 
     panels {
       selector {
@@ -27,26 +29,28 @@ home {
     }
 
     container {
-      flex: 1 1 auto;
+      flex: 0 1 auto;
 
       display: flex;
 
-      max-width: 50%;
-
-      // overflow: hidden;
+      justify-content: center;
 
       data {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
 
         overflow: auto;
 
         word-break: break-all;
+
+        direction: rtl;
 
         raw {
           flex: 0 1 auto;
 
           display: flex;
           flex-direction: column;
+
+          direction: ltr;
 
           font-family: monospace;
 

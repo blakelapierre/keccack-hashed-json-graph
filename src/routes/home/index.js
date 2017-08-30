@@ -1,4 +1,5 @@
 import { h, Component } from 'preact';
+import { Link } from 'preact-router/match';
 import style from './style';
 
 import keccak from '../../lib/keccak.js';
@@ -52,48 +53,42 @@ function post(url, data) {
   });
 }
 
-function getLatest() {
-  return get('http://localhost:9999/keccak/latest');
-}
-
-function getContent(hash) {
-  return get(`http://localhost:9999/keccak/${hash}`);
-}
-
 function postLookup(hashes) {
   return post(`http://localhost:9999/keccak/lookup`, hashes);
 }
 
-const transforms = {
-  addData(hash, data, state) {
-    const bucket = state.data[hash] = state.data[hash] || [];
-    for (let i = 0; i < bucket.length; i++)
-      if (bucket[i] === data)
-        return state;
-
-    bucket.push(data);
-
-    return state;
-  }
-};
-
 
 export default class Home extends Component {
   state = {
-    data: {}
+    // data: {}
+    // data: this.props.store.data
   }
 
-  constructor() {
+  constructor(props) {
     super();
 
-    const home = this;
+    this.state.data = props.store.data;
+
+    const home = this,
+          {store} = props;
+
+    const {getContent, getLatest} = (data => ({
+      getContent(hash) {
+        const bucket = data[hash];
+        return bucket ? new Promise((resolve, reject) => resolve(bucket[0])) : get(`http://localhost:9999/keccak/${hash}`);
+      },
+
+      getLatest() {
+        return get('http://localhost:9999/keccak/latest');
+      }
+    }))(this.state.data);
 
     getLatest()
       .then(latest => {
         return latest.split('\n').reduce((promise, hash) => {
-          return promise
-                  .then(() => getContent(hash))
-                  .then(data => home.setState.call(home, transforms['addData'].bind(home, hash, data)));
+          return !hash ? undefined : promise
+                                      .then(getContent.bind(undefined, hash))
+                                      .then(data => home.setState.call(home, store.transforms['addData'].bind(home, hash, data)));
         }, Promise.resolve());
         // return postLookup(latest
         //             .split('\n')
@@ -109,12 +104,15 @@ export default class Home extends Component {
 
     for (let i = 0; i < hashes.length; i++) {
       console.log('settings', text, hashes[i], objects[i], jsons[i]);
-      const xhr = new XMLHttpRequest();
       const hash = hashes[i].substring(7),
             json = jsons[i];
 
-      xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
-      xhr.send(json);
+      if (this.state.data[hash] === undefined) {
+        const xhr = new XMLHttpRequest();
+
+        xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
+        xhr.send(json);
+      }
 
       this.setState(transforms['addData'].bind(this, hash, json));
     }
@@ -133,14 +131,17 @@ export default class Home extends Component {
 
     for (let i = 0; i < hashes.length; i++) {
       console.log('setting', text, hashes[i], jsons[i]);
-      const xhr = new XMLHttpRequest();
       const hash = hashes[i].substring(7),
             json = jsons[i];
 
-      xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
-      xhr.send(json);
+      if (this.state.data[hash] === undefined) {
+        const xhr = new XMLHttpRequest();
 
-      this.setState(transforms['addData'].bind(this, hash, json));
+        xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
+        xhr.send(json);
+      }
+
+      this.setState(this.props.store.transforms['addData'].bind(this, hash, json));
     }
     // this.setState(transforms['addData'].bind(this, hash, json));
   }
@@ -153,7 +154,7 @@ export default class Home extends Component {
         <TabPanel>
           <container
             header="Raw">
-            <data>{Object.keys(data).map(k => data[k].map(d => <Raw hash={k} data={d} />))}</data>
+            <data>{Object.keys(data).map(k => data[k].map(d => <Link href={`/keccak/${k}`}><Raw hash={k} data={d} /></Link>))}</data>
           </container>
         </TabPanel>
 
@@ -181,7 +182,7 @@ const TextTagsInput = ({text, tags, onAdd}) => (
   <text-input>
     <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
     <textarea value={tags} ref={el => this.tags = el}></textarea>
-    <button onClick={() => onAdd(this.textarea.value, this.tags.value.length > 0 ? this.tags.value.split(',') : undefined)}>Add</button>
+    <button onClick={() => onAdd(this.textarea.value, this.tags.value.length > 0 ? this.tags.value.split(',') : undefined) & this.textarea.focus()}>Add</button>
   </text-input>
 );
 
