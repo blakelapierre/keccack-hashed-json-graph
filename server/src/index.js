@@ -36,11 +36,16 @@ async function keccakGetAll (ctx, next) // jshint ignore:line
 
 }
 
+const max = 50;
 async function keccakGetLatest (ctx, next) // jshint ignore:line
 {
   ctx.response.set('Access-Control-Allow-Origin', '*');
 
-  ctx.body = latest.map(([_, hash]) => hash).join('\n');
+  const start = Math.max(0, latest.length - max),
+        end = Math.max(0, Math.min(start + max, latest.length));
+console.log(start, end);
+
+  ctx.body = latest.slice(start, end).map(([_, hash]) => hash).join('\n');
 }
 
 async function keccakGetHash (ctx, next) // jshint ignore:line
@@ -98,10 +103,11 @@ async function keccakPostHash (ctx, next) // jshint ignore:line
   return next();
 
   function readAndStore(req, response) {
-    const buffer = [];
-    let totalLength = 0;
-
     return new Promise((resolve, reject) => {
+      const buffer = [];
+
+      let totalLength = 0;
+
       req.on('data', data => {
         console.log('data', data);
         totalLength += data.length;
@@ -111,7 +117,8 @@ async function keccakPostHash (ctx, next) // jshint ignore:line
       req.on('end', function() {
         const data = Buffer.concat(buffer).toString('utf8');
 
-        if (addToStore(keccakStore, hash, data)) {
+        if (keccak(data) === hash) {
+          addToStore(keccakStore, hash, data);
           response.status = 200;
           console.log('stored', data);
         }
@@ -128,14 +135,7 @@ async function keccakPostHash (ctx, next) // jshint ignore:line
 }
 
 function addToStore(store, hash, data) {
-  const dataHash = keccak(data);
-
-  if (dataHash === hash) {
-    keccakStore[hash] = keccakStore[hash] || [];
-    keccakStore[hash].push(data);
-    latest.push([new Date().getTime(), hash]);
-
-    return true;
-  }
-  return false;
+  keccakStore[hash] = keccakStore[hash] || [];
+  keccakStore[hash].push(data);
+  latest.push([new Date().getTime(), hash]);
 }
