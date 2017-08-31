@@ -5,4 +5,4 @@ mkdir app
 
 cp -r ../.package ./app
 
-sudo docker build -t blakelapierre/base-node .
+sudo docker build -t factcompany/node-db .
