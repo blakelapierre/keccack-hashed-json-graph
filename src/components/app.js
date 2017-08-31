@@ -8,6 +8,8 @@ import Profile from '../routes/profile';
 // import Home from 'async!./home';
 // import Profile from 'async!./profile';
 
+import keccak from '../lib/keccak.js';
+
 const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
 
 
@@ -27,6 +29,15 @@ const transforms = {
 const store = {
   transforms,
   data: {},
+  addData: data =>
+    new Promise((resolve, reject) => {
+      const hash = kekkack(data),
+            bucket = (store.data[hash] = store.data[hash] || []);
+
+      bucket.push(data);
+
+      resolve(data);
+    }),
   getData: hash =>
     new Promise((resolve, reject) =>
       lookupInStore(store, hash)

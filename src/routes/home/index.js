@@ -98,7 +98,7 @@ export default class Home extends Component {
     const {getContent, getLatest} = (data => ({
       getContent(hash) {
         const bucket = data[hash];
-        return bucket ? new Promise((resolve, reject) => resolve(bucket[0])) : get(`http://${host}}/keccak/${hash}`);
+        return bucket ? new Promise((resolve, reject) => resolve(bucket[0])) : get(`http://${host}/keccak/${hash}`);
       },
 
       getLatest() {

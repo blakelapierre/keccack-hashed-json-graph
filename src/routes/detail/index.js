@@ -50,7 +50,7 @@ export default class Detail extends Component {
     return (
       <detail>
         <View {...props} />
-        <Input />
+        <Input {...props} />
         <Link href="/">&lt;--</Link>
       </detail>
     );
@@ -92,10 +92,12 @@ class View extends Component {
 }
 
 class Input extends Component {
-  render() {
+  render({hash, store}) {
     return (
       <detail-input>
-        input
+        About: {hash}
+        <textarea></textarea>
+        <button>Add</button>
       </detail-input>
     );
   }
