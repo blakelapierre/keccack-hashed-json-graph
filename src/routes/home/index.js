@@ -203,8 +203,14 @@ const TextInput = ({text, onAdd}) => (
 
 const TextTagsInput = ({text, tags, onAdd}) => (
   <text-input>
-    <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
-    <textarea value={tags} ref={el => this.tags = el}></textarea>
+    <div>
+      <div>Text</div>
+      <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
+    </div>
+    <div>
+      <div>Tags (separate with commas)</div>
+      <textarea value={tags} ref={el => this.tags = el}></textarea>
+    </div>
     <button onClick={() => onAdd(this.textarea.value, this.tags.value.length > 0 ? this.tags.value.split(',') : undefined) & this.textarea.focus()}>Add</button>
   </text-input>
 );

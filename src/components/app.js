@@ -67,7 +67,9 @@ function lookupInLocalStorage(hash) {
 }
 
 function lookupInServer(hash) {
-  return get(`http://localhost:9999/keccak/${hash}`);
+  const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
+
+  return get(`http://${host}/keccak/${hash}`);
 }
 
 
