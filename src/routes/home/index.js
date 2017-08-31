@@ -4,7 +4,7 @@ import style from './style';
 
 import keccak from '../../lib/keccak.js';
 
-console.log(keccak('test'));
+const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
 
 const Raw =
   ({hash, data}) => (
@@ -77,7 +77,7 @@ function post(url, data) {
 }
 
 function postLookup(hashes) {
-  return post(`http://localhost:9999/keccak/lookup`, hashes);
+  return post(`http://${host}/keccak/lookup`, hashes);
 }
 
 
@@ -98,11 +98,11 @@ export default class Home extends Component {
     const {getContent, getLatest} = (data => ({
       getContent(hash) {
         const bucket = data[hash];
-        return bucket ? new Promise((resolve, reject) => resolve(bucket[0])) : get(`http://localhost:9999/keccak/${hash}`);
+        return bucket ? new Promise((resolve, reject) => resolve(bucket[0])) : get(`http://${host}}/keccak/${hash}`);
       },
 
       getLatest() {
-        return get('http://localhost:9999/keccak/latest');
+        return get(`http://${host}/keccak/latest`);
       }
     }))(this.state.data);
 
@@ -133,7 +133,7 @@ export default class Home extends Component {
       if (this.state.data[hash] === undefined) {
         const xhr = new XMLHttpRequest();
 
-        xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
+        xhr.open('POST', `http://${host}/keccak/${hash}`, true);
         xhr.send(json);
       }
 
@@ -160,7 +160,7 @@ export default class Home extends Component {
       if (this.state.data[hash] === undefined) {
         const xhr = new XMLHttpRequest();
 
-        xhr.open('POST', `http://localhost:9999/keccak/${hash}`, true);
+        xhr.open('POST', `http://${host}/keccak/${hash}`, true);
         xhr.send(json);
       }
 

@@ -8,6 +8,8 @@ import Profile from '../routes/profile';
 // import Home from 'async!./home';
 // import Profile from 'async!./profile';
 
+const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
+
 
 const transforms = {
   addData(hash, data, state) {
@@ -67,8 +69,6 @@ function lookupInLocalStorage(hash) {
 }
 
 function lookupInServer(hash) {
-  const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
-
   return get(`http://${host}/keccak/${hash}`);
 }
 

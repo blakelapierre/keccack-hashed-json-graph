@@ -46,6 +46,18 @@ const typeRenderer = {
 };
 
 export default class Detail extends Component {
+  render (props, {data}) {
+    return (
+      <detail>
+        <View {...props} />
+        <Input />
+        <Link href="/">&lt;--</Link>
+      </detail>
+    );
+  }
+}
+
+class View extends Component {
   constructor(props) {
     super(props);
 
@@ -59,7 +71,7 @@ export default class Detail extends Component {
          .catch(error => detail.setState.call(detail, {data: (<span>Not Found!</span>)}));
   }
 
-  render ({hash, store}, {data}) {
+  render({hash, store}, {data}) {
     if (hash !== this.state.hash) {
       const detail = this;
 
@@ -71,13 +83,20 @@ export default class Detail extends Component {
     const type = 'Raw';
 
     return (
-      <detail>
-        <info>
-          <hash>{hash}</hash>
-          {typeRenderer[type]({hash, data})}
-        </info>
-        <Link href="/">&lt;--</Link>
-      </detail>
+      <info>
+        <hash>{hash}</hash>
+        {typeRenderer[type]({hash, data})}
+      </info>
+    );
+  }
+}
+
+class Input extends Component {
+  render() {
+    return (
+      <detail-input>
+        input
+      </detail-input>
     );
   }
 }
