@@ -4,7 +4,7 @@ detail {
   display: flex;
   flex-direction: column;
 
-  justify-content: center;
+  justify-content: space-around;
   align-items: center;
 
   info {
@@ -30,6 +30,33 @@ detail {
     table {
       .label {
         font-size: 0.65em;
+      }
+    }
+  }
+
+  detail-input {
+    display: flex;
+    flex-direction: column;
+
+    background-color: rgba(127, 127, 127, 0.5);
+
+    about {
+      font-size: 0.65em;
+    }
+
+    inputs {
+
+      labeled-text {
+        display: flex;
+
+        table {
+          width: 100%;
+
+          textarea {
+            width: 100%;
+          }
+        }
+
       }
     }
   }

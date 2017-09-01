@@ -1,5 +1,5 @@
 import { h, Component } from 'preact';
-import { Link } from 'preact-router/match';
+import { Link, route } from 'preact-router/match';
 
 import style from './style';
 
@@ -16,6 +16,32 @@ const Raw = ({hash, data}) => (
       </tbody>
     </table>
   </raw>
+);
+
+
+const Input = ({hash, store, object, route}) => (
+  <detail-input>
+    <about>About: {hash}</about>
+    <inputs>
+      <LabeledText object={object} />
+    </inputs>
+    <button onClick={() => store.addData(JSON.stringify(Object.assign({about: `keccak:${hash}`}, object))).then(({hash}) => route(`/keccak/${hash}`))}>Add</button>
+  </detail-input>
+);
+
+const LabeledText = ({object}) => (
+  <labeled-text>
+    <table>
+      <tbody>
+        {Object.keys(object).map(key => (
+          <tr>
+            <td>{key}:</td>
+            <td><textarea onInput={({target: {value}}) => (object[key] = value)}></textarea></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </labeled-text>
 );
 
 function renderKeccakLinks(text = '') {
@@ -50,7 +76,7 @@ export default class Detail extends Component {
     return (
       <detail>
         <View {...props} />
-        <Input {...props} />
+        <Input {...props} object={{'comment': ''}} />
         <Link href="/">&lt;--</Link>
       </detail>
     );
@@ -65,22 +91,19 @@ class View extends Component {
 
     this.state = {hash};
 
-    const detail = this;
+    this.load(store, hash, this);
+  }
+
+  load(store, hash, scope) {
     store.getData(hash)
-         .then(data => detail.setState.call(detail, {data}))
-         .catch(error => detail.setState.call(detail, {data: (<span>Not Found!</span>)}));
+         .then(data => scope.setState.call(scope, {hash, data}))
+         .catch(error => scope.setState.call(scope, {hash, data: (<span>Not Found!</span>)}));
   }
 
   render({hash, store}, {data}) {
-    if (hash !== this.state.hash) {
-      const detail = this;
-
-      store.getData(hash)
-           .then(data => detail.setState.call(detail, {hash, data}))
-           .catch(error => detail.setState.call(detail, {hash, data: (<span>Not Found!</span>)}));
-    }
-
     const type = 'Raw';
+console.log('hash', hash);
+    if (hash !== this.state.hash) this.load(store, hash, this);
 
     return (
       <info>
@@ -91,14 +114,14 @@ class View extends Component {
   }
 }
 
-class Input extends Component {
-  render({hash, store}) {
-    return (
-      <detail-input>
-        About: {hash}
-        <textarea></textarea>
-        <button>Add</button>
-      </detail-input>
-    );
-  }
-}
+// class Input extends Component {
+//   render({hash, store}) {
+//     return (
+//       <detail-input>
+//         About: {hash}
+//         <textarea ref={el => this.textarea.el = el}></textarea>
+//         <button onClick={() => {}}>Add</button>
+//       </detail-input>
+//     );
+//   }
+// }

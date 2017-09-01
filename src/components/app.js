@@ -1,5 +1,5 @@
 import { h, Component } from 'preact';
-import { Router } from 'preact-router';
+import { Router, route } from 'preact-router';
 
 import Header from './header';
 import Home from '../routes/home';
@@ -7,6 +7,8 @@ import Detail from '../routes/detail';
 import Profile from '../routes/profile';
 // import Home from 'async!./home';
 // import Profile from 'async!./profile';
+
+console.log(Detail);
 
 import keccak from '../lib/keccak.js';
 
@@ -26,18 +28,62 @@ const transforms = {
   }
 };
 
+
+function storeData(hash, data) {
+  return new Promise((resolve, reject) => {
+    const bucket = (store.data[hash] = store.data[hash] || []);
+
+    for (let i = 0; i < bucket.length; i++)
+      if (data === bucket[i])
+        return resolve();
+
+    bucket.push(data);
+
+    resolve();
+  });
+}
+
+function storeDataOnServer(hash, data) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open('POST', `http://${host}/keccak/${hash}`, true);
+    xhr.send(data);
+
+    xhr.addEventListener('loadend', resolve);
+    xhr.addEventListener('error', reject);
+  });
+}
+
+function storeDataInLocalStorage(hash, data) {
+  return new Promise((resolve, reject) => {
+    if (localStorage) {
+      const bucket = JSON.parse(localStorage[hash] || '[]');
+
+      for (let i = 0; i < bucket.length; i++)
+        if (data === bucket[i])
+          return resolve();
+
+      bucket.push(data);
+      resolve();
+    }
+  });
+}
+
 const store = {
   transforms,
   data: {},
+  jsonReferences: {},
   addData: data =>
     new Promise((resolve, reject) => {
-      const hash = kekkack(data),
-            bucket = (store.data[hash] = store.data[hash] || []);
+      const hash = keccak(data);
 
-      bucket.push(data);
-
-      resolve(data);
+      storeData(hash, data)
+        .then(() => storeDataOnServer(hash, data))
+        .then(() => storeDataInLocalStorage(hash, data))
+        .then(() => resolve({hash, data}));
     }),
+
   getData: hash =>
     new Promise((resolve, reject) =>
       lookupInStore(store, hash)
@@ -110,7 +156,7 @@ export default class App extends Component {
       <div id="app">
         <Router onChange={this.handleRoute}>
           <Home store={store} path="/" />
-          <Detail store={store} path="/keccak/:hash" />
+          <Detail store={store} route={route} path="/keccak/:hash" />
         </Router>
       </div>
     );
