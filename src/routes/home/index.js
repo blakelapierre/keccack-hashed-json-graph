@@ -2,50 +2,13 @@ import { h, Component } from 'preact';
 import { Link } from 'preact-router/match';
 import style from './style';
 
+import {Hash, ColorHash} from '../../components/hash';
+import {Raw} from '../../components/raw';
+import {TabPanel} from '../../components/tabPanel';
+
 import keccak from '../../lib/keccak.js';
 
 const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
-
-const Raw =
-  ({hash, data}) => (
-    <raw>
-      <table>
-        <tbody>
-          <tr>
-            <td className={style['label']}>Data</td>
-            <td><data>{renderKeccakLinks(data)}</data></td>
-          </tr>
-          <tr>
-            <td className={style['label']}>Hash</td>
-            <td><hash>{hash}</hash></td>
-          </tr>
-        </tbody>
-      </table>
-    </raw>
-  );
-
-function renderKeccakLinks(text) {
-  const matches = text.match(/keccak:([0-9a-f]){64}/g),
-        result = [];
-
-  if (!matches) return text;
-
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i],
-          index = text.indexOf(match),
-          prev = text.substring(0, index),
-          hash = text.substring(index, index + 64 + 7);
-
-    result.push(prev);
-    result.push(<Link className={style['keccak-link']} href={`/keccak/${hash.substring(7)}`}>{hash}</Link>);
-
-    text = text.substring(index + 64 + 7);
-  }
-
-  result.push(text);
-
-  return result;
-}
 
 const Text = ({text}) => <text>{text}</text>;
 const TextJSON = ({text, json}) => <text-json><text>{text}</text><json>{json}</json></text-json>;
@@ -83,6 +46,7 @@ function postLookup(hashes) {
 
 export default class Home extends Component {
   state = {
+    log: []
     // data: {}
     // data: this.props.store.data
   }
@@ -95,30 +59,24 @@ export default class Home extends Component {
     const home = this,
           {store} = props;
 
-    const {getContent, getLatest} = (data => ({
-      getContent(hash) {
-        const bucket = data[hash];
-        return bucket ? new Promise((resolve, reject) => resolve(bucket[0])) : get(`http://${host}/keccak/${hash}`);
-      },
+    this.store = store;
 
-      getLatest() {
-        return get(`http://${host}/keccak/latest`);
-      }
-    }))(this.state.data);
-
-    getLatest()
-      .then(latest => {
-        return latest.split('\n').reduce((promise, hash) => {
-          return !hash ? undefined : promise
-                                      .then(getContent.bind(undefined, hash))
-                                      .then(data => home.setState.call(home, store.transforms['addData'].bind(home, hash, data)));
-        }, Promise.resolve());
-        // return postLookup(latest
-        //             .split('\n')
-        //             .map(line => line.split(',')[1])
-        //             .join('\n') + '\n');
-      })
+    store
+      .getLatest()
+      .then(latest =>
+        latest
+          .reduce((promise, hash) =>
+            !hash ? undefined
+                  : store.getData(hash)
+                         .then(data =>
+                           setState(store.transforms['addData'].bind(home, hash, data)))
+          , Promise.resolve())
+      )
       .catch(error => console.log('Get latest error!', error));
+
+    function setState(state) {
+      return home.setState.call(home, state);
+    }
   }
 
   onTextAdd(text) {
@@ -143,7 +101,7 @@ export default class Home extends Component {
     return hashes;
   }
 
-  onTextTagsAdd(text, tags = []) {
+  onTextTagsAdd(text, tags) {
     // const hashed = {text: this.onTextAdd.call(this, text), tags: tags.map(tag => this.onTextAdd.call(this, tag.trim()))},
     //       {hashes, jsons} = makeFullyHashed(hashed);
     const hashed = {text, tags},
@@ -158,10 +116,7 @@ export default class Home extends Component {
             json = jsons[i];
 
       if (this.state.data[hash] === undefined) {
-        const xhr = new XMLHttpRequest();
-
-        xhr.open('POST', `http://${host}/keccak/${hash}`, true);
-        xhr.send(json);
+        this.store.addData(json);
       }
 
       this.setState(this.props.store.transforms['addData'].bind(this, hash, json));
@@ -171,13 +126,23 @@ export default class Home extends Component {
 
 
           //<data>{Object.keys(data).map(k => data[k].map(d => <HashTextJSON hash={k} {...makeFullyUnhashed(data, d)} />))}</data>
-  render({text, tags}, {data}) {
+  render({text, tags, route, store: {hosts, data: storeData, log}, ...props}, {data}) {
     return (
       <home>
         <TabPanel>
+          {hosts.map(host => (
+            <container
+              header={`db (${host})`}>
+              <DataView items={log} data={data} {...props} />
+            </container>
+          ))}
           <container
-            header="Raw">
-            <data>{Object.keys(data).map(k => data[k].map(d => <Link href={`/keccak/${k}`}><Raw hash={k} data={d} /></Link>))}</data>
+            header="localStorage">
+            <DataView items={['ceec1972c7f3e92c0483c1d8fc1b50676176b877278d0157350dd41c51f0f14d']} data={{'ceec1972c7f3e92c0483c1d8fc1b50676176b877278d0157350dd41c51f0f14d':['456']}} {... props} />
+          </container>
+          <container
+            header="store">
+            <DataView items={log} data={storeData} {... props} />
           </container>
         </TabPanel>
 
@@ -187,12 +152,17 @@ export default class Home extends Component {
   }
 }
 
+const DataView = ({data, items, ...props}) => (
+  <db>{items.map(hash => data[hash].map(d => <Link href={`/keccak/${hash}`}><Raw hash={hash} data={d} {...props} /></Link>))}</db>
+);
+
 // {
 //   hash,
 //   data,
 //   json,
 //   object
 // }
+
 
 const TextInput = ({text, onAdd}) => (
   <text-input>
@@ -294,32 +264,6 @@ function unhashJSONToDepth(data, hashed, max_depth, depth = 0) {
 
 function unhashJSONToDepthWithHandlers(data, handlers, hashed, max_depth, depth = 0) {
 
-}
-
-class TabPanel extends Component {
-  constructor(props) {
-    super(props);
-
-    this.state = {
-      selected: 0
-    };
-  }
-
-  render({children, className}) {
-    const {selected} = this.state;
-    return (
-      <tab-panel className={style[className]}>
-        {children[selected]}
-        <panels>
-          {children.map(({attributes: { header }}, i) =>
-            <selector
-              className={selected === i ? style['selected'] : ''}
-              onClick={() => this.setState({selected: i})}
-              >{header}</selector>)}
-        </panels>
-      </tab-panel>
-    );
-  }
 }
 
 

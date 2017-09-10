@@ -1,5 +1,9 @@
+
 detail {
-  flex: 1 1 auto;
+  max-width: 100%;
+  word-break: break-all;
+
+  flex: 0 1 auto;
 
   display: flex;
   flex-direction: column;
@@ -19,6 +23,16 @@ detail {
           color: #00e;
         }
       }
+
+      info {
+        &.loading-true {
+          background-color: rgba(127, 127, 127, 0.25);
+        }
+
+        &.loading-false {
+          background-color: rgba(127, 127, 127, 0.5);
+        }
+      }
     }
 
     hash {
@@ -34,7 +48,51 @@ detail {
     }
   }
 
+  view {
+    flex: 0 1 auto;
+
+    max-width: 100%;
+
+    overflow: auto;
+
+    info {
+      max-width: 100%;
+    }
+
+    tab-panel {
+      margin-left: 1em;
+
+      tab {
+        display: block;
+
+        background-color: rgba(0, 0, 0, 0.1);
+
+        a {
+          text-decoration: none;
+
+          &:visited {
+            color: default;
+          }
+        }
+
+        div {
+          display: inline-block;
+
+          padding: 0.1em;
+
+          font-size: 0.55em;
+
+          border-bottom: solid 1px #000;
+        }
+      }
+    }
+  }
+
   detail-input {
+    width: 100%;
+
+    flex: 0 0 auto;
+
     display: flex;
     flex-direction: column;
 
@@ -56,7 +114,6 @@ detail {
             width: 100%;
           }
         }
-
       }
     }
   }

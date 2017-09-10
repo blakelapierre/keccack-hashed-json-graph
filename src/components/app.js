@@ -12,17 +12,22 @@ console.log(Detail);
 
 import keccak from '../lib/keccak.js';
 
+const hosts = ['localhost:9999', 'db.fact.company'];
+
 const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
 
 
 const transforms = {
   addData(hash, data, state) {
-    const bucket = state.data[hash] = state.data[hash] || [];
+    const bucket = state.data[hash] = state.data[hash] || [],
+          {log} = state;
+
     for (let i = 0; i < bucket.length; i++)
       if (bucket[i] === data)
         return state;
 
-    bucket.push(data);
+    bucket.unshift(data);
+    log.unshift(hash);
 
     return state;
   }
@@ -30,14 +35,9 @@ const transforms = {
 
 
 function storeData(hash, data) {
+  console.log('storing', hash);
   return new Promise((resolve, reject) => {
-    const bucket = (store.data[hash] = store.data[hash] || []);
-
-    for (let i = 0; i < bucket.length; i++)
-      if (data === bucket[i])
-        return resolve();
-
-    bucket.push(data);
+    transforms.addData(hash, data, store);
 
     resolve();
   });
@@ -64,15 +64,54 @@ function storeDataInLocalStorage(hash, data) {
         if (data === bucket[i])
           return resolve();
 
-      bucket.push(data);
+      bucket.unshift(data);
       resolve();
     }
   });
 }
 
+function classify(hash, data) {
+  tryClassifyJSON(hash, data, store.jsonReferences);
+}
+
+function tryClassifyJSON(hash, data, jsonReferences) {
+  console.log('try classify', data, jsonReferences);
+  try {
+    const object = JSON.parse(data);
+
+    console.log(object);
+
+    if (Array.isArray(object)) {
+
+    }
+    else if (typeof object === 'object') {
+      for (let key in object) {
+        const value = object[key];
+
+        if (typeof value === 'string') {
+          const match = value.match(/^keccak:([0-9a-f]{64})$/);
+          if (match) {
+            console.log('match2', match);
+            const [_, referenceHash] = match,
+                  referenceHashBucket = (jsonReferences[referenceHash] = jsonReferences[referenceHash] || {}),
+                  keyBucket = (referenceHashBucket[key] = referenceHashBucket[key] || []);
+
+            keyBucket.unshift(hash);
+
+            console.log('jsonref', {jsonReferences});
+          }
+        }
+      }
+    }
+  }
+  catch (e) {}
+}
+
 const store = {
+  hosts,
   transforms,
   data: {},
+  log: [],
   jsonReferences: {},
   addData: data =>
     new Promise((resolve, reject) => {
@@ -81,6 +120,7 @@ const store = {
       storeData(hash, data)
         .then(() => storeDataOnServer(hash, data))
         .then(() => storeDataInLocalStorage(hash, data))
+        .then(() => classify(hash, data))
         .then(() => resolve({hash, data}));
     }),
 
@@ -90,19 +130,17 @@ const store = {
         .then(resolve)
         .catch(() =>
           lookupInLocalStorage(hash)
-            .then(data => {
-              (store.data[hash] = store.data[hash] || []).push(data);
-              return data;
-            })
+            .then(data => storeData(hash, data).then(() => data))
             .then(resolve)
             .catch(() =>
               lookupInServer(hash)
-                .then(data => {
-                  (store.data[hash] = store.data[hash] || []).push(data);
-                  return data;
-                })
+                .then(data => storeData(hash, data).then(() => data))
                 .then(resolve)
-                .catch(reject))))
+                .catch(reject)))),
+
+  getAbout: hash => get(`http://${host}/keccak/json/about/${hash}`).then(result => JSON.parse(result || '[]')),
+
+  getLatest: () => get(`http://${host}/keccak/latest`).then(latest => latest.split('\n'))
 };
 
 function lookupInStore(store, hash) {
@@ -126,6 +164,7 @@ function lookupInLocalStorage(hash) {
 }
 
 function lookupInServer(hash) {
+  console.log('lookup', hash);
   return get(`http://${host}/keccak/${hash}`);
 }
 
@@ -135,7 +174,7 @@ function get(url) {
     const xhr = new XMLHttpRequest();
 
     xhr.open('GET', url);
-    xhr.addEventListener('load', () => resolve(xhr.responseText));
+    xhr.addEventListener('load', () => xhr.status === 200 ? resolve(xhr.responseText) : reject(xhr.status.toString()));
     xhr.addEventListener('error', reject);
     xhr.addEventListener('timeout', reject);
     xhr.send();
@@ -152,11 +191,17 @@ export default class App extends Component {
   };
 
   render() {
+    const props = {
+      store,
+      route,
+      settings: {colorHash: true}
+    };
+
     return (
       <div id="app">
         <Router onChange={this.handleRoute}>
-          <Home store={store} path="/" />
-          <Detail store={store} route={route} path="/keccak/:hash" />
+          <Home path="/" {...props} />
+          <Detail path="/keccak/:hash" {...props} />
         </Router>
       </div>
     );

@@ -1,29 +1,20 @@
 import { h, Component } from 'preact';
 import { Link, route } from 'preact-router/match';
 
+import {Raw} from '../../components/raw';
+import {Hash} from '../../components/hash';
+import {TabPanel} from '../../components/tabPanel';
+
 import style from './style';
 
 console.log(style);
 
-const Raw = ({hash, data}) => (
-  <raw>
-    <table>
-      <tbody>
-        <tr>
-          <td className={style['label']}>Data</td>
-          <td><data>{renderKeccakLinks(data)}</data></td>
-        </tr>
-      </tbody>
-    </table>
-  </raw>
-);
 
-
-const Input = ({hash, store, object, route}) => (
+const Input = ({hash, store, object, route, ...props}) => (
   <detail-input>
-    <about>About: {hash}</about>
+    <about>About: <Hash hash={hash} {...props} /></about>
     <inputs>
-      <LabeledText object={object} />
+      <LabeledText object={object} ref={el => this.labeledText = el} />
     </inputs>
     <button onClick={() => store.addData(JSON.stringify(Object.assign({about: `keccak:${hash}`}, object))).then(({hash}) => route(`/keccak/${hash}`))}>Add</button>
   </detail-input>
@@ -36,7 +27,7 @@ const LabeledText = ({object}) => (
         {Object.keys(object).map(key => (
           <tr>
             <td>{key}:</td>
-            <td><textarea onInput={({target: {value}}) => (object[key] = value)}></textarea></td>
+            <td><textarea onInput={({target: {value}}) => (object[key] = value)} value={object[key]}></textarea></td>
           </tr>
         ))}
       </tbody>
@@ -44,35 +35,13 @@ const LabeledText = ({object}) => (
   </labeled-text>
 );
 
-function renderKeccakLinks(text = '') {
-  const matches = text.match(/keccak:([0-9a-f]){64}/g),
-        result = [];
-
-  if (!matches) return text;
-
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i],
-          index = text.indexOf(match),
-          prev = text.substring(0, index),
-          hash = text.substring(index, index + 64 + 7);
-
-    result.push(prev);
-    result.push(<Link className={style['keccak-link']} href={`/keccak/${hash.substring(7)}`}>{hash}</Link>);
-
-    text = text.substring(index + 64 + 7);
-  }
-
-  result.push(text);
-
-  return result;
-}
-
 const typeRenderer = {
   Raw
 };
 
 export default class Detail extends Component {
   render (props, {data}) {
+    console.log('detail')
     return (
       <detail>
         <View {...props} />
@@ -95,33 +64,51 @@ class View extends Component {
   }
 
   load(store, hash, scope) {
+    setState({loadingData: 'true', loadingAbout: 'true'});
+
     store.getData(hash)
-         .then(data => scope.setState.call(scope, {hash, data}))
-         .catch(error => scope.setState.call(scope, {hash, data: (<span>Not Found!</span>)}));
+         .then(data => setState({hash, data, loadingData: 'false'}))
+         .catch(error => setState({hash, data: (<span>Not Found!</span>), loadingData: 'error'}));
+
+    store.getAbout(hash)
+         .then(about => setState({hash, about, loadingAbout: 'false'}))
+         .catch(error => setState({hash, about: undefined, loadingAbout: 'error'}) & console.log(error));
+
+    function setState(...args) {
+      return scope.setState.call(scope, ...args);
+    }
   }
 
-  render({hash, store}, {data}) {
-    const type = 'Raw';
-console.log('hash', hash);
+  render({hash, store, route, ...props}, {data, about = [], loadingData, loadingAbout}) {
     if (hash !== this.state.hash) this.load(store, hash, this);
 
+    const type = 'Raw';
+
+    const referencingProperties = [];
+
+    if (about.length > 0) referencingProperties.push('about');
+
+    console.log(props);
+
     return (
-      <info>
-        <hash>{hash}</hash>
-        {typeRenderer[type]({hash, data})}
-      </info>
+      <view>
+        <info className={style[`loading-${loadingData}`]}>
+
+          {typeRenderer[type]({hash, data, ...props})}
+        </info>
+        <TabPanel>
+          {referencingProperties.map(property => (
+            <tab header={`${property} (${about.length})`}>
+              {about.map(hash => <View onClick={event => route(`/keccak/${hash}`)} hash={hash} store={store} {...props} />)}
+            </tab>
+          ))}
+        </TabPanel>
+      </view>
     );
   }
 }
 
-// class Input extends Component {
-//   render({hash, store}) {
-//     return (
-//       <detail-input>
-//         About: {hash}
-//         <textarea ref={el => this.textarea.el = el}></textarea>
-//         <button onClick={() => {}}>Add</button>
-//       </detail-input>
-//     );
-//   }
-// }
+
+     // {loadingData === 'true' ? <info>true</info> :
+     //     loadingData === 'false' ? <info>false</info> :
+     //                              <info>error</info>  }

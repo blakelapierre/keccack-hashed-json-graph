@@ -35,8 +35,10 @@ home {
 
       justify-content: center;
 
-      data {
-        flex: 0 1 auto;
+      db {
+        flex: 1 1 auto;
+
+        justify-content: center;
 
         overflow: auto;
 
@@ -45,6 +47,10 @@ home {
         direction: rtl;
 
         a {
+          word-break: break-all;
+
+          flex: 1 1 auto;
+
           text-decoration: none;
           color: initial;
 
@@ -68,7 +74,7 @@ home {
           display: flex;
           flex-direction: column;
 
-          direction: ltr;
+          align-items: center;
 
           font-family: monospace;
 
@@ -81,15 +87,34 @@ home {
             background-color: rgba(127, 127, 127, 0.2);
           }
 
-          hash {
-            font-size: 0.65em;
-            font-family: monospace;
+          table {
+            width: 100%;
 
-            background-color: rgba(127, 127, 127, 0.25);
+            direction: ltr;
+          }
+
+          .info {
+            display: flex;
+
+            align-items: center;
+
+            color-hash {
+              padding: 0.1em;
+
+              font-size: 0.65em;
+              font-family: monospace;
+
+              background-color: rgba(127, 127, 127, 0.25);
+
+              span {
+                display: inline-block;
+              }
+            }
           }
 
           data {
-
+            display: block;
+            flex: 1 1 auto;
           }
         }
 
