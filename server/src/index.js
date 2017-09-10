@@ -1,4 +1,3 @@
-// require('traceur-runtime');
 import fs from 'fs';
 import path from 'path';
 
@@ -7,10 +6,9 @@ import http from 'http';
 import Koa from 'koa';
 import Router from 'koa-trie-router';
 
-// import stacks from 'koa-stacks';
-// import bodyparser from 'koa-bodyparser';
-
 import keccak from './keccak';
+
+if (!fs.existsSync('keccak')) fs.mkdirSync('keccak');
 
 const keccakStore = {},
       jsonReferences = {},
