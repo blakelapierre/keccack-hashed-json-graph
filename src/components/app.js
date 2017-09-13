@@ -12,6 +12,8 @@ console.log(Detail);
 
 import keccak from '../lib/keccak.js';
 
+const hashFnName = 'keccak';
+
 const hosts = ['localhost:9999', 'db.fact.company'];
 
 const host = window.location.hostname === 'localhost' ? 'localhost:9999' : 'db.fact.company';
@@ -47,7 +49,7 @@ function storeDataOnServer(hash, data) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
-    xhr.open('POST', `http://${host}/keccak/${hash}`, true);
+    xhr.open('POST', `http://${host}/${hashFnName}/${hash}`, true);
     xhr.send(data);
 
     xhr.addEventListener('loadend', resolve);
@@ -138,9 +140,15 @@ const store = {
                 .then(resolve)
                 .catch(reject)))),
 
-  getAbout: hash => get(`http://${host}/keccak/json/about/${hash}`).then(result => JSON.parse(result || '[]')),
+  getReferencesByKey: (hash, key) => get(`http://${host}/${hashFnName}/${hash}/json/${key}`).then(result => JSON.parse(result || '[]')),
 
-  getLatest: () => get(`http://${host}/keccak/latest`).then(latest => latest.split('\n'))
+  getJsonReferences: hash => get(`http://${host}/${hashFnName}/${hash}/json`).then(result => JSON.parse(result || '{}')).catch(() => ({})),
+
+  getLatest: () => get(`http://${host}/${hashFnName}/latest`).then(latest => latest.split('\n')),
+
+  getSubscribeLatest: callback => stream(`http://${host}/${hashFnName}/subscribe/latest`, (data, state) => callback(data.split('\n'))),
+
+  getSubscribeJsonKey: (key, callback) => stream(`http://${host}/${hashFnName}/subscribe/json/${key}`, (data, state) => callback(data.split('\n')))
 };
 
 function lookupInStore(store, hash) {
@@ -165,7 +173,7 @@ function lookupInLocalStorage(hash) {
 
 function lookupInServer(hash) {
   console.log('lookup', hash);
-  return get(`http://${host}/keccak/${hash}`);
+  return get(`http://${host}/${hashFnName}/${hash}`);
 }
 
 
@@ -175,6 +183,25 @@ function get(url) {
 
     xhr.open('GET', url);
     xhr.addEventListener('load', () => xhr.status === 200 ? resolve(xhr.responseText) : reject(xhr.status.toString()));
+    xhr.addEventListener('error', reject);
+    xhr.addEventListener('timeout', reject);
+    xhr.send();
+  });
+}
+
+function stream(url, callback) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    let position = 0;
+    xhr.open('GET', url);
+    xhr.addEventListener('readystatechange', event => {
+
+      const newText = event.target.responseText.substring(position);
+      position += newText.length;
+
+      callback(newText);
+    });
     xhr.addEventListener('error', reject);
     xhr.addEventListener('timeout', reject);
     xhr.send();
@@ -194,6 +221,7 @@ export default class App extends Component {
     const props = {
       store,
       route,
+      hashFnName,
       settings: {colorHash: true}
     };
 
@@ -201,7 +229,7 @@ export default class App extends Component {
       <div id="app">
         <Router onChange={this.handleRoute}>
           <Home path="/" {...props} />
-          <Detail path="/keccak/:hash" {...props} />
+          <Detail path={`/${props.hashFnName}/:hash`} {...props} />
         </Router>
       </div>
     );

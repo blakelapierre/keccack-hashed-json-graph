@@ -6,7 +6,7 @@ home {
   justify-content: center;
   align-items: center;
 
-  tab-panel {
+  left {
     flex: 1 1 auto;
 
     max-height: 100%;
@@ -17,143 +17,147 @@ home {
     justify-content: center;
     align-items: stretch;
 
-    panels {
-      selector {
-        font-size: 0.55rem;
-        font-weight: bold;
+    tab-panel {
+      panels {
+        selector {
+          font-size: 0.55rem;
+          font-weight: bold;
 
-        &.selected {
-          background-color: rgba(127, 127, 127, 0.5);
+          &.selected {
+            background-color: rgba(127, 127, 127, 0.5);
+          }
         }
       }
-    }
 
-    container {
-      flex: 0 1 auto;
+      container {
+        flex: 0 1 auto;
 
-      display: flex;
-
-      justify-content: center;
-
-      db {
-        flex: 1 1 auto;
+        display: flex;
 
         justify-content: center;
 
-        overflow: auto;
-
-        word-break: break-all;
-
-        direction: rtl;
-
-        a {
-          word-break: break-all;
-
+        db {
           flex: 1 1 auto;
 
-          text-decoration: none;
-          color: initial;
+          justify-content: center;
 
-          &:visited {
-            color: initial;
-          }
-        }
+          overflow: auto;
 
-        .keccak-link {
-          text-decoration: underline;
-          color: #00e;
+          word-break: break-all;
 
-          &:visited {
+          direction: rtl;
+
+          .keccak-link {
+            text-decoration: underline;
             color: #00e;
-          }
-        }
 
-        raw {
-          flex: 0 1 auto;
-
-          display: flex;
-          flex-direction: column;
-
-          align-items: center;
-
-          font-family: monospace;
-
-          .label {
-            font-size: 0.35rem;
-            font-weight: bold;
-          }
-
-          &:hover {
-            background-color: rgba(127, 127, 127, 0.2);
-          }
-
-          table {
-            width: 100%;
-
-            direction: ltr;
-          }
-
-          .info {
-            display: flex;
-
-            align-items: center;
-
-            color-hash {
-              padding: 0.1em;
-
-              font-size: 0.65em;
-              font-family: monospace;
-
-              background-color: rgba(127, 127, 127, 0.25);
-
-              span {
-                display: inline-block;
-              }
+            &:visited {
+              color: #00e;
             }
           }
 
-          data {
-            display: block;
-            flex: 1 1 auto;
-          }
-        }
+          raw {
+            flex: 0 1 auto;
 
-        hash-text-json {
-          flex: 0 1 auto;
+            display: flex;
+            flex-direction: column;
 
-          display: flex;
-          flex-direction: column;
+            align-items: center;
 
-          &:hover {
-            background-color: rgba(127, 127, 127, 0.2);
-          }
-
-          hash {
-            font-size: 0.75em;
             font-family: monospace;
 
-            background-color: rgba(127, 127, 127, 0.25);
+            .label {
+              font-size: 0.35rem;
+              font-weight: bold;
+            }
+
+            &:hover {
+              background-color: rgba(127, 127, 127, 0.2);
+            }
+
+            table {
+              width: 100%;
+
+              direction: ltr;
+            }
+
+            .info {
+              display: flex;
+
+              align-items: center;
+
+              color-hash {
+                padding: 0.1em;
+
+                font-size: 0.65em;
+                font-family: monospace;
+
+                background-color: rgba(127, 127, 127, 0.25);
+
+                span {
+                  display: inline-block;
+                }
+              }
+            }
+
+            data {
+              display: block;
+              flex: 1 1 auto;
+            }
           }
 
-          json {
-            font-size: 0.75em;
-            font-family: monospace;
+          hash-text-json {
+            flex: 0 1 auto;
 
-            background-color: rgba(127, 127, 127, 0.1);
+            display: flex;
+            flex-direction: column;
+
+            &:hover {
+              background-color: rgba(127, 127, 127, 0.2);
+            }
+
+            hash {
+              font-size: 0.75em;
+              font-family: monospace;
+
+              background-color: rgba(127, 127, 127, 0.25);
+            }
+
+            json {
+              font-size: 0.75em;
+              font-family: monospace;
+
+              background-color: rgba(127, 127, 127, 0.1);
+            }
           }
         }
       }
     }
   }
 
-  text-input {
+  right {
     flex: 1 1 auto;
 
     display: flex;
+    flex-direction: column;
 
     max-width: 50%;
 
     justify-content: center;
     align-items: center;
+
+    text-input {
+      display: flex;
+      flex-direction: column;
+
+      align-items: center;
+
+      label {
+        display: block;
+
+        font-size: 0.75em;
+        font-weight: bold;
+      }
+    }
   }
 }

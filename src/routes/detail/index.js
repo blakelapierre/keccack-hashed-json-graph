@@ -41,7 +41,7 @@ const typeRenderer = {
 
 export default class Detail extends Component {
   render (props, {data}) {
-    console.log('detail')
+    console.log('detail', props)
     return (
       <detail>
         <View {...props} />
@@ -64,23 +64,27 @@ class View extends Component {
   }
 
   load(store, hash, scope) {
-    setState({loadingData: 'true', loadingAbout: 'true'});
+    setState({loadingData: 'true', loadingAbout: 'true', loadingHash: hash});
 
     store.getData(hash)
          .then(data => setState({hash, data, loadingData: 'false'}))
          .catch(error => setState({hash, data: (<span>Not Found!</span>), loadingData: 'error'}));
 
-    store.getAbout(hash)
-         .then(about => setState({hash, about, loadingAbout: 'false'}))
-         .catch(error => setState({hash, about: undefined, loadingAbout: 'error'}) & console.log(error));
+    store.getJsonReferences(hash)
+         .then(references => setState({hash, references}))
+         .catch(error => setState({hash, references: undefined}) & console.log(error));
+
+    // store.getAbout(hash)
+    //      .then(about => setState({hash, about, loadingAbout: 'false'}))
+    //      .catch(error => setState({hash, about: undefined, loadingAbout: 'error'}) & console.log(error));
 
     function setState(...args) {
       return scope.setState.call(scope, ...args);
     }
   }
 
-  render({hash, store, route, ...props}, {data, about = [], loadingData, loadingAbout}) {
-    if (hash !== this.state.hash) this.load(store, hash, this);
+  render({hash, hashFnName, store, route, ...props}, {data, about = [], loadingData, loadingAbout, references = {}}) {
+    if (hash !== this.state.loadingHash) this.load(store, hash, this);
 
     const type = 'Raw';
 
@@ -88,18 +92,17 @@ class View extends Component {
 
     if (about.length > 0) referencingProperties.push('about');
 
-    console.log(props);
+    console.log('hashFnName', hashFnName);
 
     return (
       <view>
-        <info className={style[`loading-${loadingData}`]}>
-
-          {typeRenderer[type]({hash, data, ...props})}
+        <info className={style[`loading-${loadingData}`]} onClick={() => route(`/${hashFnName}/${hash}`)}>
+          {typeRenderer[type]({hash, hashFnName, store, route, data, ...props})}
         </info>
         <TabPanel>
-          {referencingProperties.map(property => (
-            <tab header={`${property} (${about.length})`}>
-              {about.map(hash => <View onClick={event => route(`/keccak/${hash}`)} hash={hash} store={store} {...props} />)}
+          {Object.keys(references).map(referenceKey => (
+            <tab header={`${referenceKey} (${references[referenceKey]})`}>
+              <Reference {...{referenceKey, hash, hashFnName, store, route, count: references[referenceKey], ...props}} />
             </tab>
           ))}
         </TabPanel>
@@ -107,6 +110,36 @@ class View extends Component {
     );
   }
 }
+
+class Reference extends Component {
+  state = {
+    referenceKey: undefined,
+    count: 0
+  }
+
+  load(store, hash, referenceKey, scope) {
+    console.log('loading', hash, referenceKey);
+    store.getReferencesByKey(hash, referenceKey)
+         .then(references => setState({referenceKey, references, error: undefined}))
+         .catch(error => setState({referenceKey, error, references: undefined}));
+
+    function setState(...args) {
+      return scope.setState.call(scope, ...args);
+    }
+  }
+
+  render({referenceKey, count, hash, store, ...props}, {references = []}) {
+    console.log(referenceKey, count, store, references);
+    if (referenceKey !== this.state.referenceKey) this.load(store, hash, referenceKey, this);
+
+    return (
+      <reference>
+        {references.map(hash => <View hash={hash} store={store} {...props} />)}
+      </reference>
+    );
+  }
+}
+    // {references[reference].map(hash => <View onClick={event => route(`/keccak/${hash}`)} hash={hash} store={store} {...props} />)}
 
 
      // {loadingData === 'true' ? <info>true</info> :

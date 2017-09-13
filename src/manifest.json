@@ -16,4 +16,5 @@
     "type": "image/png",
     "sizes": "512x512"
   }]
-}
+const Post = post => ({post});
+const PostWithAuthor = (post, author) => ({post, author});

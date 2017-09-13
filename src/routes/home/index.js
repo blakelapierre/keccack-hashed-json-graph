@@ -46,7 +46,9 @@ function postLookup(hashes) {
 
 export default class Home extends Component {
   state = {
-    log: []
+    log: [],
+    delay: 500,
+    failCount: 0
     // data: {}
     // data: this.props.store.data
   }
@@ -61,18 +63,27 @@ export default class Home extends Component {
 
     this.store = store;
 
-    store
-      .getLatest()
-      .then(latest =>
-        latest
-          .reduce((promise, hash) =>
-            !hash ? undefined
-                  : store.getData(hash)
-                         .then(data =>
-                           setState(store.transforms['addData'].bind(home, hash, data)))
-          , Promise.resolve())
-      )
-      .catch(error => console.log('Get latest error!', error));
+    if (!this.latestSubscription) this.latestSubscription = subscribe();
+
+    function subscribe() {
+      return (
+        store
+          // .getSubscribeLatest(hashes => {
+          .getSubscribeJsonKey('link', hashes => {
+            console.log('hashes', hashes);
+            hashes
+              .reduce((promise, hash) =>
+                !hash ? undefined
+                      : store.getData(hash)
+                             .then(data =>
+                               setState(store.transforms['addData'].bind(home, hash, data)))
+              , Promise.resolve())
+          })
+          .then(subscribe)
+          .then(() => home.state.failCount = 0)
+          .catch(() => setTimeout(subscribe, (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1)))))
+      );
+    }
 
     function setState(state) {
       return home.setState.call(home, state);
@@ -80,7 +91,6 @@ export default class Home extends Component {
   }
 
   onTextAdd(text) {
-    // const {hash, json} = hashObject({text});
     const {hashes, objects, jsons} = makeFullyHashed({text});
 
     for (let i = 0; i < hashes.length; i++) {
@@ -102,8 +112,6 @@ export default class Home extends Component {
   }
 
   onTextTagsAdd(text, tags) {
-    // const hashed = {text: this.onTextAdd.call(this, text), tags: tags.map(tag => this.onTextAdd.call(this, tag.trim()))},
-    //       {hashes, jsons} = makeFullyHashed(hashed);
     const hashed = {text, tags},
           {hash, json} = hashObject(hashed),
           hashes = [hash],
@@ -121,39 +129,41 @@ export default class Home extends Component {
 
       this.setState(this.props.store.transforms['addData'].bind(this, hash, json));
     }
-    // this.setState(transforms['addData'].bind(this, hash, json));
   }
 
 
           //<data>{Object.keys(data).map(k => data[k].map(d => <HashTextJSON hash={k} {...makeFullyUnhashed(data, d)} />))}</data>
-  render({text, tags, route, store: {hosts, data: storeData, log}, ...props}, {data}) {
+  render({text, tags, store: {hosts, data: storeData, log}, ...props}, {data}) {
     return (
       <home>
-        <TabPanel>
-          {hosts.map(host => (
+        <left>
+          <TabPanel>
+            {hosts.map(host => (
+              <container
+                header={`db (${host})`}>
+                <DataView items={log} data={data} {...props} />
+              </container>
+            ))}
             <container
-              header={`db (${host})`}>
-              <DataView items={log} data={data} {...props} />
+              header="localStorage">
+              <DataView items={['ceec1972c7f3e92c0483c1d8fc1b50676176b877278d0157350dd41c51f0f14d']} data={{'ceec1972c7f3e92c0483c1d8fc1b50676176b877278d0157350dd41c51f0f14d':['456']}} {... props} />
             </container>
-          ))}
-          <container
-            header="localStorage">
-            <DataView items={['ceec1972c7f3e92c0483c1d8fc1b50676176b877278d0157350dd41c51f0f14d']} data={{'ceec1972c7f3e92c0483c1d8fc1b50676176b877278d0157350dd41c51f0f14d':['456']}} {... props} />
-          </container>
-          <container
-            header="store">
-            <DataView items={log} data={storeData} {... props} />
-          </container>
-        </TabPanel>
-
-        <TextTagsInput text={text} tags={tags} onAdd={this.onTextTagsAdd.bind(this)} />
+            <container
+              header="store">
+              <DataView items={log} data={storeData} {... props} />
+            </container>
+          </TabPanel>
+        </left>
+        <right>
+          <TextTagsInput text={text} tags={tags} onAdd={this.onTextTagsAdd.bind(this)} />
+        </right>
       </home>
     );
   }
 }
 
-const DataView = ({data, items, ...props}) => (
-  <db>{items.map(hash => data[hash].map(d => <Link href={`/keccak/${hash}`}><Raw hash={hash} data={d} {...props} /></Link>))}</db>
+const DataView = ({data, items, route, ...props}) => (
+  <db>{items.map(hash => data[hash].map(d => <Raw hash={hash} data={d} onClick={() => route(`/keccak/${hash}`)} {...props} />))}</db>
 );
 
 // {
@@ -174,11 +184,11 @@ const TextInput = ({text, onAdd}) => (
 const TextTagsInput = ({text, tags, onAdd}) => (
   <text-input>
     <div>
-      <div>Text</div>
+      <label>Text</label>
       <textarea autofocus value={text} ref={el => this.textarea = el}></textarea>
     </div>
     <div>
-      <div>Tags (separate with commas)</div>
+      <label>Tags (separate with commas)</label>
       <textarea value={tags} ref={el => this.tags = el}></textarea>
     </div>
     <button onClick={() => onAdd(this.textarea.value, this.tags.value.length > 0 ? this.tags.value.split(',') : undefined) & this.textarea.focus()}>Add</button>

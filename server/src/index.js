@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import {Readable} from 'stream';
 
 import http from 'http';
 
@@ -8,21 +9,26 @@ import Router from 'koa-trie-router';
 
 import keccak from './keccak';
 
-if (!fs.existsSync('keccak')) fs.mkdirSync('keccak');
+const hashFnName = 'keccak';
+
+if (!fs.existsSync(hashFnName)) fs.mkdirSync(hashFnName);
 
 const keccakStore = {},
-      jsonReferences = {},
+      jsonHashReferences = {},
+      jsonKeyReferences = {},
       listeners = {},
-      latestFile = fs.openSync('keccak/latest', 'a+'),
-      latestStat = fs.statSync('keccak/latest'),
+      latestFile = fs.openSync(`${hashFnName}/latest`, 'a+'),
+      latestStat = fs.statSync(`${hashFnName}/latest`),
       latestBuffer = new Buffer(100 * (2 + 64 + new Date().getTime().toString().length)),
       latestRead = fs.readSync(latestFile, latestBuffer, 0, Math.min(latestBuffer.length, latestStat.size), Math.min(0, latestStat.size - Math.min(latestBuffer.length, latestStat.size))),
-      latest = latestRead > 0 ? latestBuffer.toString().split('\n').slice(0, -1).map(line => line.split(' ')) : [];
-
+      latest = latestRead > 0 ? latestBuffer.toString().split('\n').slice(0, -1).reverse().map(line => line.split(' ')) : [];
+console.log(latest);
 const port = process.env.port || 9999;
 
 const app = new Koa(),
       router = new Router();
+
+attachRoutes(router, generateRoutes(), 'keccak');
 
 app.use((ctx, next) => {
   ctx.response.set('Access-Control-Allow-Origin', '*');
@@ -33,150 +39,265 @@ app.use((ctx, next) => {
   return next();
 });
 
-router
-  .get('/keccak/all', keccakGetAll)
-  .get('/keccak/latest', keccakGetLatest)
-  .get('/keccak/:hash', keccakGetHash)
-  .get('/keccak/json/:key/:hash', keccakGetJsonKeyHash)
-  .post('/keccak', keccakPostLookup)
-  .post('/keccak/:hash', keccakPostHash);
-
 app.use(router.middleware());
 
 app.listen(port);
 
 console.log('HTTP server listing on port', port);
 
-async function keccakGetAll (ctx, next) // jshint ignore:line
-{
-  ctx.body = keccakStore;
-}
 
-const max = 50;
-async function keccakGetLatest (ctx, next) // jshint ignore:line
-{
-  const start = Math.max(0, latest.length - max),
-        end = Math.max(0, Math.min(start + max, latest.length));
+function attachRoutes(router, allRoutes, hashFnName) {
+  for (let method in allRoutes) {
+    const r = router[method],
+          routes = allRoutes[method];
 
-  ctx.body = latest.slice(start, end).map(([_, hash]) => hash).join('\n');
-
-  return next();
-}
-
-async function keccakGetHash (ctx, next) // jshint ignore:line
-{
-  const {hash} = ctx.params,
-        data = await lookupHash('keccak', hash); // jshint ignore:line
-
-  console.log(hash, 'requested');
-
-  if (data) {
-    ctx.body = data;
-  }
-  else ctx.response.status = 404;
-
-  return next();
-}
-
-async function keccakGetJsonKeyHash(ctx, next) // jshint ignore:line
-{
-  const {key, hash} = ctx.params,
-        references = jsonReferences[hash];
-
-  if (references) {
-    const bucket = references[key];
-
-    if (bucket) {
-      ctx.body = JSON.stringify(bucket);
-      return next();
+    for (let path in routes) {
+      r(`/${hashFnName}/${path}`, routes[path]);
     }
   }
-
-  ctx.body = '[]';
-  return next();
 }
 
-async function keccakPostLookup (ctx, next) // jshint ignore:line
-{
-  await new Promise((resolve, reject) => { // jshint ignore:line
-    const {req, response} = ctx;
+function generateRoutes() {
+  const max = 50;
+  const maxLength = 100000;
 
-    req.on('data', data => {
-      console.log('lookup', data, response);
-
-      response.body = data.toString('utf16le').split('\n').reduce((body, hash) => {
-        console.log(hash, body);
-        return `${body}${hash} ${keccakStore[hash]}\n`;
-      }, response.body);
-      response.status = 200;
-    });
-
-    req.on('end', resolve);
+  return ({
+    'get': {
+      'all': getAll,
+      'latest': getLatest,
+      'subscribe/latest': getSubscribeLatest,
+      'subscribe/json/:key': getSubscribeJsonKey,
+      ':hash': getHash,
+      ':hash/json': getHashJson,
+      ':hash/json/:key': getHashJsonKey
+    },
+    'post': {
+      '': postLookup,
+      ':hash': postHash
+    }
   });
 
-  return next();
-}
+  async function getAll (ctx, next) // jshint ignore:line
+  {
+    ctx.body = keccakStore; // uh, wut?
 
-const maxLength = 100000;
+    return next();
+  }
 
-async function keccakPostHash (ctx, next) // jshint ignore:line
-{
-  const {hash} = ctx.params;
+  async function getLatest (ctx, next) // jshint ignore:line
+  {
+    const start = Math.max(0, latest.length - max),
+          end = Math.max(0, Math.min(start + max, latest.length));
 
-  console.log(hash, 'posting');
+    ctx.body = latest.slice(start, end).map(([_, hash]) => hash).join('\n');
 
-  const {response, request, req} = ctx;
+    return next();
+  }
 
-  await readAndStore(req, response); // jshint ignore:line
+  async function getSubscribeLatest(ctx, next) // jshint ignore:line
+  {
+    ctx.response.set('Content-Type', 'application/octet-stream');
+    ctx.response.set('Cache-Control', 'no-cache');
+    ctx.status = 200;
 
-  return next();
+    const start = 0,
+          end = Math.min(50, latest.length);
 
-  function readAndStore(req, response) {
-    return new Promise((resolve, reject) => {
-      const buffer = [];
+    ctx.res.write(latest.slice(start, end).map(([_, hash]) => hash).join('\n'));
 
-      let totalLength = 0;
+    let count = 0,
+        send = true;
 
-      req.on('data', dataHandler);
-      req.on('end', endHandler);
+    console.log('latest subscriber');
 
-      function dataHandler(data) {
-        console.log('data', data);
-        totalLength += data.length;
+    ctx.res.on('close', () => {send = false; console.log('subscriber left');});
 
-        if (totalLength > maxLength) {
-          req.off('data', dataHandler);
-          req.off('end', endHandler);
-          reject('Too large! maxLength =', maxLength);
-        }
+    // while (++count < 50)
+    while (send) {
+      const data = await getLatestPromise(); // jshint ignore:line
+      console.log('sending latest', data);
+      if (send) ctx.res.write(data);
+    }
 
-        buffer.push(data);
+    console.log('done with subscribe');
+
+    return next();
+  }
+
+  async function getSubscribeJsonKey(ctx, next) // jshint ignore:line
+  {
+    const {response, params: {key}} = ctx;
+
+    response.set('Content-Type', 'application/octet-stream');
+    response.set('Cache-Control', 'no-cache');
+
+    ctx.status = 200;
+
+    const references = jsonKeyReferences[key];
+    if (references) {
+
+      const list = references,
+            start = 0,
+            end = Math.min(50, list.length);
+
+      ctx.res.write(list.slice(start, end).map(([_, hash]) => hash).join('\n'));
+    }
+
+    let count = 0,
+        send = true;
+
+    console.log(key, 'subscriber');
+
+    ctx.res.on('close', () => {send = false; console.log('subscriber left');});
+
+    // while (++count < 50)
+    while (send) {
+      const data = await getJsonKeyPromise(key); // jshint ignore:line
+      console.log('sending json key', data);
+      if (send) ctx.res.write(data);
+    }
+
+    console.log('done with subscribe');
+
+    return next();
+  }
+
+  async function getHash (ctx, next) // jshint ignore:line
+  {
+    const {hash} = ctx.params,
+          data = await lookupHash(hashFnName, hash); // jshint ignore:line
+
+    console.log(hash, 'requested');
+
+    if (data) {
+      ctx.body = data;
+    }
+    else ctx.response.status = 404;
+
+    return next();
+  }
+
+  async function getHashJson(ctx, next) // jshint ignore:line
+  {
+    const {hash} = ctx.params,
+          references = jsonHashReferences[hash];
+
+    if (references) {
+      const counts = Object.keys(references).reduce((agg, key) => {
+        const r = references[key];
+
+        agg[key] = r.length;
+
+        return agg;
+      }, {});
+
+      ctx.body = JSON.stringify(counts);
+
+      ctx.response.status = 200;
+    }
+    else ctx.response.status = 404;
+
+    return next();
+  }
+
+  async function getHashJsonKey(ctx, next) // jshint ignore:line
+  {
+    const {key, hash} = ctx.params,
+          references = jsonHashReferences[hash];
+
+    if (references) {
+      const bucket = references[key];
+
+      if (bucket) {
+        ctx.body = JSON.stringify(bucket);
+        return next();
       }
+    }
 
-      function endHandler() {
-        const data = Buffer.concat(buffer).toString('utf8');
+    ctx.body = '[]';
+    return next();
+  }
 
-        console.log({data, hash});
+  async function postLookup (ctx, next) // jshint ignore:line
+  {
+    await new Promise((resolve, reject) => { // jshint ignore:line
+      const {req, response} = ctx;
 
-        if (keccak(data) === hash) {
-          const references = classify(hash, data);
+      req.on('data', data => {
+        console.log('lookup', data, response);
 
-          addToStore(keccakStore, hash, data);
-          addToFileSystem(hash, data)
-            .then(() => addToLatest(hash))
-            .then(() => scheduleUpdateNotifications({listeners}, references, data))
-            .then(() => {
-              response.status = 200;
-              console.log('stored', data);
-              resolve();
-            });
-        }
-        else {
-          response.status = 400;
-          reject();
-        }
-      }
+        response.body = data.toString('utf16le').split('\n').reduce((body, hash) => {
+          console.log(hash, body);
+          return `${body}${hash} ${keccakStore[hash]}\n`;
+        }, response.body);
+        response.status = 200;
+      });
+
+      req.on('end', resolve);
     });
+
+    return next();
+  }
+
+  async function postHash (ctx, next) // jshint ignore:line
+  {
+    const {hash} = ctx.params;
+
+    console.log(hash, 'posting');
+
+    const {response, request, req} = ctx;
+
+    await readAndStore(req, response); // jshint ignore:line
+
+    return next();
+
+    function readAndStore(req, response) {
+      return new Promise((resolve, reject) => {
+        const buffer = [];
+
+        let totalLength = 0;
+
+        req.on('data', dataHandler);
+        req.on('end', endHandler);
+
+        function dataHandler(data) {
+          console.log('data', data);
+          totalLength += data.length;
+
+          if (totalLength > maxLength) {
+            req.off('data', dataHandler);
+            req.off('end', endHandler);
+            reject(`Too large! maxLength = ${maxLength}`);
+          }
+
+          buffer.push(data);
+        }
+
+        function endHandler() {
+          const data = Buffer.concat(buffer).toString('utf8');
+
+          if (keccak(data) === hash) {
+            addToStore(keccakStore, hash, data)
+              .then(() => addToLatest(hash))
+              .then(() => addToFileSystem(hash, data)) // should probably just queue a write to file system
+              .then(() => scheduleUpdateNotifications({listeners}, classify(hash, data), data))
+              .then(() => {
+                response.status = 200;
+                console.log('stored', data);
+                resolve();
+              })
+              .catch(error => {
+                console.log('error', error);
+                resolve();
+              });
+          }
+          else {
+            response.status = 400;
+            reject();
+          }
+        }
+      });
+    }
   }
 }
 
@@ -194,16 +315,32 @@ function lookupHash(type, hash) {
   });
 }
 
-function addToFileSystem(hash, data) {
-  const pieces = splitHash(hash);
-
-  return createPiecesDirectories(pieces).then(path => writeFile(path, data));
+function addToStore(store, hash, data) {
+  return new Promise((resolve, reject) => {
+    const bucket = (keccakStore[hash] = keccakStore[hash] || []);
+console.log('add', bucket, data);
+    for (let i = 0; i < bucket.length; i++) {
+      if (bucket[i] === data) {
+        return reject('duplicate');
+      }
+    }
+console.log('adding');
+    bucket.push(data);
+    resolve();
+  });
 }
 
 function addToLatest(hash) {
   const time = new Date().getTime();
-  latest.push([time, hash]);
+  latest.unshift([time, hash]);
+  scheduleLatestUpdate(hash);
   return new Promise((resolve, reject) => fs.write(latestFile, `${time} ${hash}\n`, error => error ? reject(error) : resolve()));
+}
+
+function addToFileSystem(hash, data) {
+  const pieces = splitHash(hash);
+
+  return createPiecesDirectories(pieces).then(path => writeFile(path, data));
 }
 
 function splitHash(hash, width = 3) {
@@ -245,11 +382,6 @@ function writeFile(path, data) {
   return new Promise((resolve, reject) => fs.writeFile(path, data, error => error ? reject(error) : resolve()));
 }
 
-function addToStore(store, hash, data) {
-  keccakStore[hash] = keccakStore[hash] || [];
-  keccakStore[hash].push(data);
-}
-
 function scheduleUpdateNotifications({listeners}, references, data) {
   references.forEach(obj => {
     for (let key in obj) {
@@ -262,10 +394,10 @@ function scheduleUpdateNotifications({listeners}, references, data) {
 }
 
 function classify(hash, data) {
-  return tryClassifyJSON(hash, data, jsonReferences);
+  return tryClassifyJSON(hash, data, jsonHashReferences);
 }
 
-function tryClassifyJSON(hash, data, jsonReferences) {
+function tryClassifyJSON(hash, data, jsonHashReferences) {
   try {
     const object = JSON.parse(data),
           references = [];
@@ -277,20 +409,24 @@ function tryClassifyJSON(hash, data, jsonReferences) {
     }
     else if (typeof object === 'object') {
       for (let key in object) {
-        const value = object[key];
+        const value = object[key],
+              secondaryKeyBucket = (jsonKeyReferences[key] = jsonKeyReferences[key] || []);
+
+        secondaryKeyBucket.push([new Date().getTime(), hash]);
+        if (jsonKeyPromises[key]) scheduleJsonKeyUpdate(key, hash);
 
         if (typeof value === 'string') {
           const match = value.match(/^keccak:([0-9a-f]{64})$/);
           if (match) {
             console.log('match', match);
             const [_, referenceHash] = match,
-                  referenceHashBucket = (jsonReferences[referenceHash] = jsonReferences[referenceHash] || {}),
+                  referenceHashBucket = (jsonHashReferences[referenceHash] = jsonHashReferences[referenceHash] || {}),
                   keyBucket = (referenceHashBucket[key] = referenceHashBucket[key] || []);
 
             keyBucket.push(hash);
             references.push({[key]: [hash, referenceHash]});
 
-            console.dir(jsonReferences);
+            console.dir(jsonHashReferences);
           }
         }
       }
@@ -298,4 +434,111 @@ function tryClassifyJSON(hash, data, jsonReferences) {
     return references;
   }
   catch (e) {console.log('error classifying', e);}
+}
+
+
+let latestPromise;
+function getLatestPromise() {
+  if (!latestPromise) {
+    const temp = {};
+    latestPromise = new Promise(function(resolve, reject) {
+      temp.resolve = resolve;
+      temp.reject = reject;
+    });
+    latestPromise.resolve = temp.resolve;
+    latestPromise.reject = temp.reject;
+    latestPromise.buffer = [];
+  }
+
+  return latestPromise;
+}
+
+let jsonHashKeyPromises = {};
+function getJsonHashKeyPromise(hash, key) {
+  let hashPromises = (jsonHashKeyPromises[hash] = jsonHashKeyPromises[hash]) || {},
+      keyPromise = hashPromises[key];
+
+  if (!keyPromise) {
+    const temp = {};
+    keyPromise = new Promise(function(resolve, reject) {
+      temp.resolve = resolve;
+      temp.reject = reject;
+    });
+    keyPromise.resolve = temp.resolve;
+    keyPromise.reject = temp.reject;
+    keyPromise.buffer = [];
+  }
+
+  return keyPromise;
+}
+
+let jsonKeyPromises = {};
+function getJsonKeyPromise(key) {
+  let keyPromise = jsonKeyPromises[key];
+
+  if (!keyPromise) {
+    const temp = {};
+    keyPromise = new Promise(function(resolve, reject) {
+      temp.resolve = resolve;
+      temp.reject = reject;
+    });
+    keyPromise.resolve = temp.resolve;
+    keyPromise.reject = temp.reject;
+    keyPromise.buffer = [];
+
+    jsonKeyPromises[key] = keyPromise;
+
+    console.log('jsonKeyPromise crated');
+  }
+
+  return keyPromise;
+}
+
+function scheduleLatestUpdate(hash) {
+  const promise = getLatestPromise();
+  promise.buffer.push(hash);
+
+  if (promise.timer) {
+    clearTimeout(promise.timer);
+  }
+  promise.timer = setTimeout(broadcastLatest, 1000 / 60);
+
+  return promise;
+}
+
+function scheduleJsonKeyUpdate(key, referenceHash) {
+  const promise = getJsonKeyPromise(key);
+  promise.buffer.push(referenceHash);
+
+  console.log('buffering', referenceHash);
+
+  if (promise.timer) {
+    clearTimeout(promise.timer);
+  }
+  promise.timer = setTimeout(() => broadcastJsonKey(key), 1000 / 60);
+
+  return promise;
+}
+
+function broadcastLatest() {
+  console.log('broadcast latest');
+  const promise = getLatestPromise();
+  if (promise.buffer.length > 0) {
+    latestPromise = undefined;
+    console.log('resolving');
+    promise.resolve(promise.buffer.join('\n')); // ?
+    promise.buffer.splice(0);
+  }
+}
+
+function broadcastJsonKey(key) {
+  console.log('broadcast', key);
+  const promise = getJsonKeyPromise(key);
+  if (promise.buffer.length > 0) {
+    console.log(promise.buffer);
+    delete jsonKeyPromises[key];
+    console.log('resolving');
+    promise.resolve(promise.buffer.join('\n')); // ?
+    promise.buffer.splice(0);
+  }
 }

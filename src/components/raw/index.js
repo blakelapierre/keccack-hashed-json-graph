@@ -4,12 +4,12 @@ import { Link } from 'preact-router/match';
 import {Hash} from '../hash';
 
 const Raw =
-  ({hash, data, ...props}) => (
-    <raw>
+  ({hash, data, onClick, ...props}) => (
+    <raw onClick={onClick}>
       <table>
         <tbody>
           <tr>
-            <td><data>{renderKeccakLinks(data, props)}</data></td>
+            <td><data>{renderLinks(data, props)}</data></td>
           </tr>
           <tr className={style['info']}>
             <td><Hash hash={hash} {...props} /></td>
@@ -21,22 +21,24 @@ const Raw =
 
 export {Raw};
 
-function renderKeccakLinks(text = '', props) {
-  const matches = text.match(/keccak:([0-9a-f]){64}/g),
+function renderLinks(text = '', props) {
+  const regexp = /(ftp|http|https|keccak):(\/\/)?([^ "]+)/ig,
         result = [];
 
-  if (!matches) return text;
+  let match;
+  while ((match = regexp.exec(text)) !== null) {
 
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i],
-          index = text.indexOf(match),
+    const index = text.indexOf(match[0]),
+          protocol = match[1],
           prev = text.substring(0, index),
-          hash = text.substring(index, index + 64 + 7);
+          next = text.substring(index + match[0].length);
 
     result.push(prev);
-    result.push(<Link className={style['keccak-link']} href={`/keccak/${hash.substring(7)}`}><Hash hash={hash.substring(7)} {...props} /></Link>);
 
-    text = text.substring(index + 64 + 7);
+    if (protocol === 'keccak') result.push(<Hash hash={match[3]} {...props} />);
+    else result.push(<a href={match[0]} onClick={event => event.stopPropagation()} target="linkIframe">{match[0]}</a>);
+
+    text = next;
   }
 
   result.push(text);

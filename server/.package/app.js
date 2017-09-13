@@ -1,10 +1,22 @@
-window=global;
+window = global;
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 'use strict';
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
-var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
+var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }(); // require('traceur-runtime');
+
+
+// import stacks from 'koa-stacks';
+// import bodyparser from 'koa-bodyparser';
+
+var _fs = require('fs');
+
+var _fs2 = _interopRequireDefault(_fs);
+
+var _path = require('path');
+
+var _path2 = _interopRequireDefault(_path);
 
 var _http = require('http');
 
@@ -24,15 +36,22 @@ var _keccak2 = _interopRequireDefault(_keccak);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-// require('traceur-runtime');
-window = {};
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
-// import stacks from 'koa-stacks';
-// import bodyparser from 'koa-bodyparser';
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
+
+if (!_fs2.default.existsSync('keccak')) _fs2.default.mkdirSync('keccak');
 
 var keccakStore = {},
     jsonReferences = {},
-    latest = [];
+    listeners = {},
+    latestFile = _fs2.default.openSync('keccak/latest', 'a+'),
+    latestStat = _fs2.default.statSync('keccak/latest'),
+    latestBuffer = new Buffer(100 * (2 + 64 + new Date().getTime().toString().length)),
+    latestRead = _fs2.default.readSync(latestFile, latestBuffer, 0, Math.min(latestBuffer.length, latestStat.size), Math.min(0, latestStat.size - Math.min(latestBuffer.length, latestStat.size))),
+    latest = latestRead > 0 ? latestBuffer.toString().split('\n').slice(0, -1).map(function (line) {
+  return line.split(' ');
+}) : [];
 
 var port = process.env.port || 9999;
 
@@ -44,7 +63,11 @@ app.use(function (ctx, next) {
   return next();
 });
 
-router.get('/keccak/all', keccakGetAll).get('/keccak/latest', keccakGetLatest).get('/keccak/:hash', keccakGetHash).get('/keccak/json/:key/:hash', keccakGetJsonKeyHash).post('/keccak/lookup', keccakPostLookup).post('/keccak/:hash', keccakPostHash);
+app.use(function (ctx, next) {
+  return next();
+});
+
+router.get('/keccak/all', keccakGetAll).get('/keccak/latest', keccakGetLatest).get('/keccak/:hash', keccakGetHash).get('/keccak/json/:key/:hash', keccakGetJsonKeyHash).post('/keccak', keccakPostLookup).post('/keccak/:hash', keccakPostHash);
 
 app.use(router.middleware());
 
@@ -53,14 +76,15 @@ app.listen(port);
 console.log('HTTP server listing on port', port);
 
 async function keccakGetAll(ctx, next) // jshint ignore:line
-{}
+{
+  ctx.body = keccakStore;
+}
 
 var max = 50;
 async function keccakGetLatest(ctx, next) // jshint ignore:line
 {
   var start = Math.max(0, latest.length - max),
       end = Math.max(0, Math.min(start + max, latest.length));
-  console.log(start, end);
 
   ctx.body = latest.slice(start, end).map(function (_ref) {
     var _ref2 = _slicedToArray(_ref, 2),
@@ -69,18 +93,19 @@ async function keccakGetLatest(ctx, next) // jshint ignore:line
 
     return hash;
   }).join('\n');
+
+  return next();
 }
 
 async function keccakGetHash(ctx, next) // jshint ignore:line
 {
   var hash = ctx.params.hash,
-      store = keccakStore[hash];
-
+      data = await lookupHash('keccak', hash); // jshint ignore:line
 
   console.log(hash, 'requested');
 
-  if (store) {
-    ctx.body = store[0];
+  if (data) {
+    ctx.body = data;
   } else ctx.response.status = 404;
 
   return next();
@@ -103,7 +128,7 @@ async function keccakGetJsonKeyHash(ctx, next) // jshint ignore:line
     }
   }
 
-  ctx.response.status = 404;
+  ctx.body = '[]';
   return next();
 }
 
@@ -174,56 +199,184 @@ async function keccakPostHash(ctx, next) // jshint ignore:line
       function endHandler() {
         var data = Buffer.concat(buffer).toString('utf8');
 
+        console.log({ data: data, hash: hash });
+
         if ((0, _keccak2.default)(data) === hash) {
-          try {
-            var object = JSON.parse(data);
-
-            if (Array.isArray(object)) {} else if ((typeof object === 'undefined' ? 'undefined' : _typeof(object)) === 'object') {
-              for (var key in object) {
-                var value = object[key];
-
-                if (typeof value === 'string') {
-                  var match = value.match(/^keccak:([0-9a-f]{64})$/);
-                  if (match) {
-                    console.log('match', match);
-
-                    var _match = _slicedToArray(match, 2),
-                        _ = _match[0],
-                        referenceHash = _match[1],
-                        referenceHashBucket = jsonReferences[referenceHash] = jsonReferences[referenceHash] || {},
-                        keyBucket = referenceHashBucket[key] = referenceHashBucket[key] || [];
-
-                    keyBucket.push(hash);
-
-                    console.dir(jsonReferences);
-                  }
-                }
-              }
-            }
-          } catch (e) {}
+          var references = classify(hash, data);
 
           addToStore(keccakStore, hash, data);
-          response.status = 200;
-          console.log('stored', data);
+          addToFileSystem(hash, data).then(function () {
+            return addToLatest(hash);
+          }).then(function () {
+            return scheduleUpdateNotifications({ listeners: listeners }, references, data);
+          }).then(function () {
+            response.status = 200;
+            console.log('stored', data);
+            resolve();
+          });
         } else {
           response.status = 400;
+          reject();
         }
-
-        console.log({ data: data, hash: hash });
-        resolve();
       }
     });
   }
 }
 
+function lookupHash(type, hash) {
+  var store = type === 'keccak' ? keccakStore : new Error('no other stores!');
+
+  return new Promise(function (resolve, reject) {
+    var bucket = store[hash];
+
+    if (bucket) {
+      return resolve(bucket[0]);
+    }
+
+    readFile(_path2.default.join.apply(_path2.default, [type].concat(_toConsumableArray(splitHash(hash))))).then(resolve).catch(reject);
+  });
+}
+
+function addToFileSystem(hash, data) {
+  var pieces = splitHash(hash);
+
+  return createPiecesDirectories(pieces).then(function (path) {
+    return writeFile(path, data);
+  });
+}
+
+function addToLatest(hash) {
+  var time = new Date().getTime();
+  latest.push([time, hash]);
+  return new Promise(function (resolve, reject) {
+    return _fs2.default.write(latestFile, time + ' ' + hash + '\n', function (error) {
+      return error ? reject(error) : resolve();
+    });
+  });
+}
+
+function splitHash(hash) {
+  var width = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 3;
+
+  var pieces = [];
+
+  for (var i = 0; i < hash.length; i += width) {
+    pieces.push(hash.substr(i, width));
+  }return pieces;
+}
+
+function createPiecesDirectories(pieces) {
+  return pieces.reduce(function (promise, piece) {
+    return promise.then(function (path) {
+      return new Promise(function (resolve, reject) {
+        var nextPath = path + '/' + piece;
+
+        exists(path).then(function () {
+          return resolve(nextPath);
+        }).catch(function () {
+          return mkdir(path).then(function () {
+            return resolve(nextPath);
+          }).catch(reject);
+        });
+      });
+    });
+  }, Promise.resolve('keccak'));
+}
+
+function exists(path) {
+  return new Promise(function (resolve, reject) {
+    return _fs2.default.exists(path, function (exists) {
+      return exists ? resolve() : reject();
+    });
+  });
+}
+
+function mkdir(path) {
+  return new Promise(function (resolve, reject) {
+    return _fs2.default.mkdir(path, function (error) {
+      return error ? reject(error) : resolve();
+    });
+  });
+}
+
+function readFile(path) {
+  return new Promise(function (resolve, reject) {
+    return _fs2.default.readFile(path, function (error, data) {
+      return error ? reject(error) : resolve(data.toString());
+    });
+  });
+}
+
+function writeFile(path, data) {
+  return new Promise(function (resolve, reject) {
+    return _fs2.default.writeFile(path, data, function (error) {
+      return error ? reject(error) : resolve();
+    });
+  });
+}
+
 function addToStore(store, hash, data) {
   keccakStore[hash] = keccakStore[hash] || [];
   keccakStore[hash].push(data);
-  latest.push([new Date().getTime(), hash]);
+}
+
+function scheduleUpdateNotifications(_ref3, references, data) {
+  var listeners = _ref3.listeners;
+
+  references.forEach(function (obj) {
+    for (var key in obj) {
+      var _obj$key = _slicedToArray(obj[key], 2),
+          hash = _obj$key[0],
+          referenceHash = _obj$key[1],
+          listener = listeners[hash]; // may want referenceHash here instead, haven't confirmed
+
+      if (listener) listener(referenceHash, data);
+    }
+  });
+}
+
+function classify(hash, data) {
+  return tryClassifyJSON(hash, data, jsonReferences);
+}
+
+function tryClassifyJSON(hash, data, jsonReferences) {
+  try {
+    var object = JSON.parse(data),
+        references = [];
+
+    console.log('try classify', object);
+
+    if (Array.isArray(object)) {} else if ((typeof object === 'undefined' ? 'undefined' : _typeof(object)) === 'object') {
+      for (var key in object) {
+        var value = object[key];
+
+        if (typeof value === 'string') {
+          var match = value.match(/^keccak:([0-9a-f]{64})$/);
+          if (match) {
+            console.log('match', match);
+
+            var _match = _slicedToArray(match, 2),
+                _ = _match[0],
+                referenceHash = _match[1],
+                referenceHashBucket = jsonReferences[referenceHash] = jsonReferences[referenceHash] || {},
+                keyBucket = referenceHashBucket[key] = referenceHashBucket[key] || [];
+
+            keyBucket.push(hash);
+            references.push(_defineProperty({}, key, [hash, referenceHash]));
+
+            console.dir(jsonReferences);
+          }
+        }
+      }
+    }
+    return references;
+  } catch (e) {
+    console.log('error classifying', e);
+  }
 }
 
 
-},{"./keccak":2,"http":undefined,"koa":37,"koa-trie-router":34}],2:[function(require,module,exports){
+},{"./keccak":2,"fs":undefined,"http":undefined,"koa":37,"koa-trie-router":34,"path":undefined}],2:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
