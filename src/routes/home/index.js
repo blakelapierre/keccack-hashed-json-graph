@@ -3,6 +3,7 @@ import { Link } from 'preact-router/match';
 import style from './style';
 
 import {Hash, ColorHash} from '../../components/hash';
+import {Json} from '../../components/json';
 import {Raw} from '../../components/raw';
 import {TabPanel} from '../../components/tabPanel';
 
@@ -63,7 +64,7 @@ export default class Home extends Component {
 
     this.store = store;
 
-    if (!this.latestSubscription) this.latestSubscription = subscribe();
+    // if (!this.latestSubscription) this.latestSubscription = subscribe();
 
     function subscribe() {
       return (
@@ -133,7 +134,8 @@ export default class Home extends Component {
 
 
           //<data>{Object.keys(data).map(k => data[k].map(d => <HashTextJSON hash={k} {...makeFullyUnhashed(data, d)} />))}</data>
-  render({text, tags, store: {hosts, data: storeData, log}, ...props}, {data}) {
+  render({text, tags, store, ...props}, {data}) {
+    const {hosts, data: storeData, log} = store;
     return (
       <home>
         <left>
@@ -141,7 +143,7 @@ export default class Home extends Component {
             {hosts.map(host => (
               <container
                 header={`db (${host})`}>
-                <DataView items={log} data={data} {...props} />
+                <FilterView {...{store, ...props}} items={log} data={data} />
               </container>
             ))}
             <container
@@ -162,8 +164,119 @@ export default class Home extends Component {
   }
 }
 
+class FilterView extends Component {
+  state = {
+    failCount: 0,
+    references: {}
+  }
+
+  constructor(props) {
+    super();
+
+    this.state.data = props.data;
+    this.state.items = props.items;
+    this.store = props.store;
+  }
+
+  setFilters(filters = []) {
+    this.setState(state => {
+      console.log('data', state.data);
+      state.items.splice(0);
+      return state;
+    });
+    // this.props.items.splice(0);
+    this.subscribe(filters);
+  }
+
+  subscribe(filters) {
+    const home = this,
+          store = this.store;
+    console.log('subscribing', filters);
+    return (
+      store
+        // .getSubscribeLatest(hashes => {
+        .getSubscribeJsonKey(filters[0] || '', hashes => {
+          console.log('hashes', hashes);
+          hashes
+            .reduce((promise, hash) =>
+              !hash ? promise
+                    : store.getData(hash)
+                           .then(data => setState(store.transforms['addData'].bind(home, hash, data)))
+                           .then(() => store.getJsonReferences(hash))
+                           .then(references => setState(state => {
+                              state.references[hash] = references; // bad way to do this... will need to delete?
+                              console.log('references', references);
+                              return state;
+                           }))
+            , Promise.resolve())
+            .then(() => setState(state => {
+              state.items = hashes;
+              return state;
+            }))
+        })
+        .then(home.subscribe.bind(home, filters))
+        .then(() => home.state.failCount = 0)
+        .catch(() => setTimeout(home.subscribe.bind(home, filters), (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1)))))
+    );
+
+    function setState(state) {
+      return home.setState.call(home, state);
+    }
+  }
+
+  render(props, {data = [], references, items}) {
+    const {setFilters} = this;
+
+    return (
+      <filter-view>
+        <FilterInput {...{setFilters: setFilters.bind(this), ...props}} />
+        <DataView {...{...props, data, references, items}} />
+      </filter-view>
+    );
+  }
+}
+
+class FilterInput extends Component {
+  state = {
+    filters: []
+  }
+
+  addFilter() {
+    const home = this,
+          store = this.props.store;
+
+    this.setState(state => {
+      if (state.filters.indexOf(home.input.value) === -1) state.filters.push(home.input.value);
+      return state;
+    });
+
+    this.props.setFilters(this.state.filters);
+  }
+
+  removeFilter(filter) {
+    this.setState(state => {
+      const index = state.filters.indexOf(filter);
+      if (index >= 0) state.filters.splice(index, 1);
+      return state;
+    });
+
+    this.props.setFilters(this.state.filters);
+  }
+
+  render({}, {filters}) {
+    return (
+      <filter-input>
+      {filters.map(filter => <filter><remove onClick={this.removeFilter.bind(this, filter)}>x</remove>{filter}</filter>)}
+        <input type="text" ref={el => this.input = el} value="" />
+        <button onClick={this.addFilter.bind(this)}>+</button>
+      </filter-input>
+    );
+  }
+}
+
 const DataView = ({data, items, route, ...props}) => (
-  <db>{items.map(hash => data[hash].map(d => <Raw hash={hash} data={d} onClick={() => route(`/keccak/${hash}`)} {...props} />))}</db>
+  <db>{items.map(hash => (data[hash] || []).map(d => <Json hash={hash} obj={JSON.parse(d)} onClick={() => route(`/keccak/${hash}`)} {...props} />))}</db>
+  // <db>{items.map(hash => data[hash].map(d => <Raw hash={hash} data={d} onClick={() => route(`/keccak/${hash}`)} {...props} />))}</db>
 );
 
 // {

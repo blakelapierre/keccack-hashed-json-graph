@@ -4,19 +4,17 @@ window = global;
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
-var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }(); // require('traceur-runtime');
-
-
-// import stacks from 'koa-stacks';
-// import bodyparser from 'koa-bodyparser';
+var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
 
 var _fs = require('fs');
 
 var _fs2 = _interopRequireDefault(_fs);
 
-var _path = require('path');
+var _path2 = require('path');
 
-var _path2 = _interopRequireDefault(_path);
+var _path3 = _interopRequireDefault(_path2);
+
+var _stream = require('stream');
 
 var _http = require('http');
 
@@ -40,23 +38,28 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
 
 function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
 
-if (!_fs2.default.existsSync('keccak')) _fs2.default.mkdirSync('keccak');
+var hashFnName = 'keccak';
+
+if (!_fs2.default.existsSync(hashFnName)) _fs2.default.mkdirSync(hashFnName);
 
 var keccakStore = {},
-    jsonReferences = {},
+    jsonHashReferences = {},
+    jsonKeyReferences = {},
     listeners = {},
-    latestFile = _fs2.default.openSync('keccak/latest', 'a+'),
-    latestStat = _fs2.default.statSync('keccak/latest'),
+    latestFile = _fs2.default.openSync(hashFnName + '/latest', 'a+'),
+    latestStat = _fs2.default.statSync(hashFnName + '/latest'),
     latestBuffer = new Buffer(100 * (2 + 64 + new Date().getTime().toString().length)),
     latestRead = _fs2.default.readSync(latestFile, latestBuffer, 0, Math.min(latestBuffer.length, latestStat.size), Math.min(0, latestStat.size - Math.min(latestBuffer.length, latestStat.size))),
-    latest = latestRead > 0 ? latestBuffer.toString().split('\n').slice(0, -1).map(function (line) {
+    latest = latestRead > 0 ? latestBuffer.toString().split('\n').slice(0, -1).reverse().map(function (line) {
   return line.split(' ');
 }) : [];
-
+console.log(latest);
 var port = process.env.port || 9999;
 
 var app = new _koa2.default(),
     router = new _koaTrieRouter2.default();
+
+attachRoutes(router, generateRoutes(), 'keccak');
 
 app.use(function (ctx, next) {
   ctx.response.set('Access-Control-Allow-Origin', '*');
@@ -67,159 +70,298 @@ app.use(function (ctx, next) {
   return next();
 });
 
-router.get('/keccak/all', keccakGetAll).get('/keccak/latest', keccakGetLatest).get('/keccak/:hash', keccakGetHash).get('/keccak/json/:key/:hash', keccakGetJsonKeyHash).post('/keccak', keccakPostLookup).post('/keccak/:hash', keccakPostHash);
-
 app.use(router.middleware());
 
 app.listen(port);
 
 console.log('HTTP server listing on port', port);
 
-async function keccakGetAll(ctx, next) // jshint ignore:line
-{
-  ctx.body = keccakStore;
-}
+function attachRoutes(router, allRoutes, hashFnName) {
+  for (var method in allRoutes) {
+    var r = router[method],
+        routes = allRoutes[method];
 
-var max = 50;
-async function keccakGetLatest(ctx, next) // jshint ignore:line
-{
-  var start = Math.max(0, latest.length - max),
-      end = Math.max(0, Math.min(start + max, latest.length));
-
-  ctx.body = latest.slice(start, end).map(function (_ref) {
-    var _ref2 = _slicedToArray(_ref, 2),
-        _ = _ref2[0],
-        hash = _ref2[1];
-
-    return hash;
-  }).join('\n');
-
-  return next();
-}
-
-async function keccakGetHash(ctx, next) // jshint ignore:line
-{
-  var hash = ctx.params.hash,
-      data = await lookupHash('keccak', hash); // jshint ignore:line
-
-  console.log(hash, 'requested');
-
-  if (data) {
-    ctx.body = data;
-  } else ctx.response.status = 404;
-
-  return next();
-}
-
-async function keccakGetJsonKeyHash(ctx, next) // jshint ignore:line
-{
-  var _ctx$params = ctx.params,
-      key = _ctx$params.key,
-      hash = _ctx$params.hash,
-      references = jsonReferences[hash];
-
-
-  if (references) {
-    var bucket = references[key];
-
-    if (bucket) {
-      ctx.body = JSON.stringify(bucket);
-      return next();
+    for (var _path in routes) {
+      r('/' + hashFnName + '/' + _path, routes[_path]);
     }
   }
-
-  ctx.body = '[]';
-  return next();
 }
 
-async function keccakPostLookup(ctx, next) // jshint ignore:line
-{
-  await new Promise(function (resolve, reject) {
-    // jshint ignore:line
-    var req = ctx.req,
-        response = ctx.response;
+function generateRoutes() {
+  var max = 50;
+  var maxLength = 100000;
 
+  return {
+    'get': {
+      'all': getAll,
+      'latest': getLatest,
+      'subscribe/latest': getSubscribeLatest,
+      'subscribe/json/:key': getSubscribeJsonKey,
+      ':hash': getHash,
+      ':hash/json': getHashJson,
+      ':hash/json/:key': getHashJsonKey
+    },
+    'post': {
+      '': postLookup,
+      ':hash': postHash
+    }
+  };
 
-    req.on('data', function (data) {
-      console.log('lookup', data, response);
+  async function getAll(ctx, next) // jshint ignore:line
+  {
+    ctx.body = keccakStore; // uh, wut?
 
-      response.body = data.toString('utf16le').split('\n').reduce(function (body, hash) {
-        console.log(hash, body);
-        return '' + body + hash + ' ' + keccakStore[hash] + '\n';
-      }, response.body);
-      response.status = 200;
+    return next();
+  }
+
+  async function getLatest(ctx, next) // jshint ignore:line
+  {
+    var start = Math.max(0, latest.length - max),
+        end = Math.max(0, Math.min(start + max, latest.length));
+
+    ctx.body = latest.slice(start, end).map(function (_ref) {
+      var _ref2 = _slicedToArray(_ref, 2),
+          _ = _ref2[0],
+          hash = _ref2[1];
+
+      return hash;
+    }).join('\n');
+
+    return next();
+  }
+
+  async function getSubscribeLatest(ctx, next) // jshint ignore:line
+  {
+    ctx.response.set('Content-Type', 'application/octet-stream');
+    ctx.response.set('Cache-Control', 'no-cache');
+    ctx.status = 200;
+
+    var start = 0,
+        end = Math.min(50, latest.length);
+
+    ctx.res.write(latest.slice(start, end).map(function (_ref3) {
+      var _ref4 = _slicedToArray(_ref3, 2),
+          _ = _ref4[0],
+          hash = _ref4[1];
+
+      return hash;
+    }).join('\n'));
+
+    var count = 0,
+        send = true;
+
+    console.log('latest subscriber');
+
+    ctx.res.on('close', function () {
+      send = false;console.log('subscriber left');
     });
 
-    req.on('end', resolve);
-  });
+    // while (++count < 50)
+    while (send) {
+      var data = await getLatestPromise(); // jshint ignore:line
+      console.log('sending latest', data);
+      if (send) ctx.res.write(data);
+    }
 
-  return next();
-}
+    console.log('done with subscribe');
 
-var maxLength = 100000;
+    return next();
+  }
 
-async function keccakPostHash(ctx, next) // jshint ignore:line
-{
-  var hash = ctx.params.hash;
-
-
-  console.log(hash, 'posting');
-
-  var response = ctx.response,
-      request = ctx.request,
-      req = ctx.req;
+  async function getSubscribeJsonKey(ctx, next) // jshint ignore:line
+  {
+    var response = ctx.response,
+        key = ctx.params.key;
 
 
-  await readAndStore(req, response); // jshint ignore:line
+    response.set('Content-Type', 'application/octet-stream');
+    response.set('Cache-Control', 'no-cache');
 
-  return next();
+    ctx.status = 200;
 
-  function readAndStore(req, response) {
-    return new Promise(function (resolve, reject) {
-      var buffer = [];
+    var references = jsonKeyReferences[key];
+    if (references) {
 
-      var totalLength = 0;
+      var list = references,
+          start = 0,
+          end = Math.min(50, list.length);
 
-      req.on('data', dataHandler);
-      req.on('end', endHandler);
+      ctx.res.write(list.slice(start, end).map(function (_ref5) {
+        var _ref6 = _slicedToArray(_ref5, 2),
+            _ = _ref6[0],
+            hash = _ref6[1];
 
-      function dataHandler(data) {
-        console.log('data', data);
-        totalLength += data.length;
+        return hash;
+      }).join('\n'));
+    }
 
-        if (totalLength > maxLength) {
-          req.off('data', dataHandler);
-          req.off('end', endHandler);
-          reject('Too large! maxLength =', maxLength);
-        }
+    var count = 0,
+        send = true;
 
-        buffer.push(data);
-      }
+    console.log(key, 'subscriber');
 
-      function endHandler() {
-        var data = Buffer.concat(buffer).toString('utf8');
-
-        console.log({ data: data, hash: hash });
-
-        if ((0, _keccak2.default)(data) === hash) {
-          var references = classify(hash, data);
-
-          addToStore(keccakStore, hash, data);
-          addToFileSystem(hash, data).then(function () {
-            return addToLatest(hash);
-          }).then(function () {
-            return scheduleUpdateNotifications({ listeners: listeners }, references, data);
-          }).then(function () {
-            response.status = 200;
-            console.log('stored', data);
-            resolve();
-          });
-        } else {
-          response.status = 400;
-          reject();
-        }
-      }
+    ctx.res.on('close', function () {
+      send = false;console.log('subscriber left');
     });
+
+    // while (++count < 50)
+    while (send) {
+      var data = await getJsonKeyPromise(key); // jshint ignore:line
+      console.log('sending json key', data);
+      if (send) ctx.res.write(data);
+    }
+
+    console.log('done with subscribe');
+
+    return next();
+  }
+
+  async function getHash(ctx, next) // jshint ignore:line
+  {
+    var hash = ctx.params.hash,
+        data = await lookupHash(hashFnName, hash); // jshint ignore:line
+
+    console.log(hash, 'requested');
+
+    if (data) {
+      ctx.body = data;
+    } else ctx.response.status = 404;
+
+    return next();
+  }
+
+  async function getHashJson(ctx, next) // jshint ignore:line
+  {
+    var hash = ctx.params.hash,
+        references = jsonHashReferences[hash];
+
+
+    if (references) {
+      var counts = Object.keys(references).reduce(function (agg, key) {
+        var r = references[key];
+
+        agg[key] = r.length;
+
+        return agg;
+      }, {});
+
+      ctx.body = JSON.stringify(counts);
+
+      ctx.response.status = 200;
+    } else ctx.response.status = 404;
+
+    return next();
+  }
+
+  async function getHashJsonKey(ctx, next) // jshint ignore:line
+  {
+    var _ctx$params = ctx.params,
+        key = _ctx$params.key,
+        hash = _ctx$params.hash,
+        references = jsonHashReferences[hash];
+
+
+    if (references) {
+      var bucket = references[key];
+
+      if (bucket) {
+        ctx.body = JSON.stringify(bucket);
+        return next();
+      }
+    }
+
+    ctx.body = '[]';
+    return next();
+  }
+
+  async function postLookup(ctx, next) // jshint ignore:line
+  {
+    await new Promise(function (resolve, reject) {
+      // jshint ignore:line
+      var req = ctx.req,
+          response = ctx.response;
+
+
+      req.on('data', function (data) {
+        console.log('lookup', data, response);
+
+        response.body = data.toString('utf16le').split('\n').reduce(function (body, hash) {
+          console.log(hash, body);
+          return '' + body + hash + ' ' + keccakStore[hash] + '\n';
+        }, response.body);
+        response.status = 200;
+      });
+
+      req.on('end', resolve);
+    });
+
+    return next();
+  }
+
+  async function postHash(ctx, next) // jshint ignore:line
+  {
+    var hash = ctx.params.hash;
+
+
+    console.log(hash, 'posting');
+
+    var response = ctx.response,
+        request = ctx.request,
+        req = ctx.req;
+
+
+    await readAndStore(req, response); // jshint ignore:line
+
+    return next();
+
+    function readAndStore(req, response) {
+      return new Promise(function (resolve, reject) {
+        var buffer = [];
+
+        var totalLength = 0;
+
+        req.on('data', dataHandler);
+        req.on('end', endHandler);
+
+        function dataHandler(data) {
+          console.log('data', data);
+          totalLength += data.length;
+
+          if (totalLength > maxLength) {
+            req.off('data', dataHandler);
+            req.off('end', endHandler);
+            reject('Too large! maxLength = ' + maxLength);
+          }
+
+          buffer.push(data);
+        }
+
+        function endHandler() {
+          var data = Buffer.concat(buffer).toString('utf8');
+
+          if ((0, _keccak2.default)(data) === hash) {
+            addToStore(keccakStore, hash, data).then(function () {
+              return addToLatest(hash);
+            }).then(function () {
+              return addToFileSystem(hash, data);
+            }) // should probably just queue a write to file system
+            .then(function () {
+              return scheduleUpdateNotifications({ listeners: listeners }, classify(hash, data), data);
+            }).then(function () {
+              response.status = 200;
+              console.log('stored', data);
+              resolve();
+            }).catch(function (error) {
+              console.log('error', error);
+              resolve();
+            });
+          } else {
+            response.status = 400;
+            reject();
+          }
+        }
+      });
+    }
   }
 }
 
@@ -233,7 +375,33 @@ function lookupHash(type, hash) {
       return resolve(bucket[0]);
     }
 
-    readFile(_path2.default.join.apply(_path2.default, [type].concat(_toConsumableArray(splitHash(hash))))).then(resolve).catch(reject);
+    readFile(_path3.default.join.apply(_path3.default, [type].concat(_toConsumableArray(splitHash(hash))))).then(resolve).catch(reject);
+  });
+}
+
+function addToStore(store, hash, data) {
+  return new Promise(function (resolve, reject) {
+    var bucket = keccakStore[hash] = keccakStore[hash] || [];
+    console.log('add', bucket, data);
+    for (var i = 0; i < bucket.length; i++) {
+      if (bucket[i] === data) {
+        return reject('duplicate');
+      }
+    }
+    console.log('adding');
+    bucket.push(data);
+    resolve();
+  });
+}
+
+function addToLatest(hash) {
+  var time = new Date().getTime();
+  latest.unshift([time, hash]);
+  scheduleLatestUpdate(hash);
+  return new Promise(function (resolve, reject) {
+    return _fs2.default.write(latestFile, time + ' ' + hash + '\n', function (error) {
+      return error ? reject(error) : resolve();
+    });
   });
 }
 
@@ -242,16 +410,6 @@ function addToFileSystem(hash, data) {
 
   return createPiecesDirectories(pieces).then(function (path) {
     return writeFile(path, data);
-  });
-}
-
-function addToLatest(hash) {
-  var time = new Date().getTime();
-  latest.push([time, hash]);
-  return new Promise(function (resolve, reject) {
-    return _fs2.default.write(latestFile, time + ' ' + hash + '\n', function (error) {
-      return error ? reject(error) : resolve();
-    });
   });
 }
 
@@ -315,13 +473,8 @@ function writeFile(path, data) {
   });
 }
 
-function addToStore(store, hash, data) {
-  keccakStore[hash] = keccakStore[hash] || [];
-  keccakStore[hash].push(data);
-}
-
-function scheduleUpdateNotifications(_ref3, references, data) {
-  var listeners = _ref3.listeners;
+function scheduleUpdateNotifications(_ref7, references, data) {
+  var listeners = _ref7.listeners;
 
   references.forEach(function (obj) {
     for (var key in obj) {
@@ -336,10 +489,10 @@ function scheduleUpdateNotifications(_ref3, references, data) {
 }
 
 function classify(hash, data) {
-  return tryClassifyJSON(hash, data, jsonReferences);
+  return tryClassifyJSON(hash, data, jsonHashReferences);
 }
 
-function tryClassifyJSON(hash, data, jsonReferences) {
+function tryClassifyJSON(hash, data, jsonHashReferences) {
   try {
     var object = JSON.parse(data),
         references = [];
@@ -348,7 +501,11 @@ function tryClassifyJSON(hash, data, jsonReferences) {
 
     if (Array.isArray(object)) {} else if ((typeof object === 'undefined' ? 'undefined' : _typeof(object)) === 'object') {
       for (var key in object) {
-        var value = object[key];
+        var value = object[key],
+            secondaryKeyBucket = jsonKeyReferences[key] = jsonKeyReferences[key] || [];
+
+        secondaryKeyBucket.push([new Date().getTime(), hash]);
+        if (jsonKeyPromises[key]) scheduleJsonKeyUpdate(key, hash);
 
         if (typeof value === 'string') {
           var match = value.match(/^keccak:([0-9a-f]{64})$/);
@@ -358,13 +515,13 @@ function tryClassifyJSON(hash, data, jsonReferences) {
             var _match = _slicedToArray(match, 2),
                 _ = _match[0],
                 referenceHash = _match[1],
-                referenceHashBucket = jsonReferences[referenceHash] = jsonReferences[referenceHash] || {},
+                referenceHashBucket = jsonHashReferences[referenceHash] = jsonHashReferences[referenceHash] || {},
                 keyBucket = referenceHashBucket[key] = referenceHashBucket[key] || [];
 
             keyBucket.push(hash);
             references.push(_defineProperty({}, key, [hash, referenceHash]));
 
-            console.dir(jsonReferences);
+            console.dir(jsonHashReferences);
           }
         }
       }
@@ -375,8 +532,116 @@ function tryClassifyJSON(hash, data, jsonReferences) {
   }
 }
 
+var latestPromise = void 0;
+function getLatestPromise() {
+  if (!latestPromise) {
+    var temp = {};
+    latestPromise = new Promise(function (resolve, reject) {
+      temp.resolve = resolve;
+      temp.reject = reject;
+    });
+    latestPromise.resolve = temp.resolve;
+    latestPromise.reject = temp.reject;
+    latestPromise.buffer = [];
+  }
 
-},{"./keccak":2,"fs":undefined,"http":undefined,"koa":37,"koa-trie-router":34,"path":undefined}],2:[function(require,module,exports){
+  return latestPromise;
+}
+
+var jsonHashKeyPromises = {};
+function getJsonHashKeyPromise(hash, key) {
+  var hashPromises = (jsonHashKeyPromises[hash] = jsonHashKeyPromises[hash]) || {},
+      keyPromise = hashPromises[key];
+
+  if (!keyPromise) {
+    var temp = {};
+    keyPromise = new Promise(function (resolve, reject) {
+      temp.resolve = resolve;
+      temp.reject = reject;
+    });
+    keyPromise.resolve = temp.resolve;
+    keyPromise.reject = temp.reject;
+    keyPromise.buffer = [];
+  }
+
+  return keyPromise;
+}
+
+var jsonKeyPromises = {};
+function getJsonKeyPromise(key) {
+  var keyPromise = jsonKeyPromises[key];
+
+  if (!keyPromise) {
+    var temp = {};
+    keyPromise = new Promise(function (resolve, reject) {
+      temp.resolve = resolve;
+      temp.reject = reject;
+    });
+    keyPromise.resolve = temp.resolve;
+    keyPromise.reject = temp.reject;
+    keyPromise.buffer = [];
+
+    jsonKeyPromises[key] = keyPromise;
+
+    console.log('jsonKeyPromise crated');
+  }
+
+  return keyPromise;
+}
+
+function scheduleLatestUpdate(hash) {
+  var promise = getLatestPromise();
+  promise.buffer.push(hash);
+
+  if (promise.timer) {
+    clearTimeout(promise.timer);
+  }
+  promise.timer = setTimeout(broadcastLatest, 1000 / 60);
+
+  return promise;
+}
+
+function scheduleJsonKeyUpdate(key, referenceHash) {
+  var promise = getJsonKeyPromise(key);
+  promise.buffer.push(referenceHash);
+
+  console.log('buffering', referenceHash);
+
+  if (promise.timer) {
+    clearTimeout(promise.timer);
+  }
+  promise.timer = setTimeout(function () {
+    return broadcastJsonKey(key);
+  }, 1000 / 60);
+
+  return promise;
+}
+
+function broadcastLatest() {
+  console.log('broadcast latest');
+  var promise = getLatestPromise();
+  if (promise.buffer.length > 0) {
+    latestPromise = undefined;
+    console.log('resolving');
+    promise.resolve(promise.buffer.join('\n')); // ?
+    promise.buffer.splice(0);
+  }
+}
+
+function broadcastJsonKey(key) {
+  console.log('broadcast', key);
+  var promise = getJsonKeyPromise(key);
+  if (promise.buffer.length > 0) {
+    console.log(promise.buffer);
+    delete jsonKeyPromises[key];
+    console.log('resolving');
+    promise.resolve(promise.buffer.join('\n')); // ?
+    promise.buffer.splice(0);
+  }
+}
+
+
+},{"./keccak":2,"fs":undefined,"http":undefined,"koa":37,"koa-trie-router":34,"path":undefined,"stream":undefined}],2:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {

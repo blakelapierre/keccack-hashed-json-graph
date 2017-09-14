@@ -2,12 +2,11 @@ import { h, Component } from 'preact';
 import { Link, route } from 'preact-router/match';
 
 import {Raw} from '../../components/raw';
+import {Json} from '../../components/json';
 import {Hash} from '../../components/hash';
 import {TabPanel} from '../../components/tabPanel';
 
 import style from './style';
-
-console.log(style);
 
 
 const Input = ({hash, store, object, route, ...props}) => (
@@ -36,7 +35,8 @@ const LabeledText = ({object}) => (
 );
 
 const typeRenderer = {
-  Raw
+  Raw,
+  Json
 };
 
 export default class Detail extends Component {
@@ -86,7 +86,13 @@ class View extends Component {
   render({hash, hashFnName, store, route, ...props}, {data, about = [], loadingData, loadingAbout, references = {}}) {
     if (hash !== this.state.loadingHash) this.load(store, hash, this);
 
-    const type = 'Raw';
+    let type = 'Raw';
+
+    try {
+      props.obj = JSON.parse(data);
+      type = 'Json';
+    }
+    catch(e) {}
 
     const referencingProperties = [];
 

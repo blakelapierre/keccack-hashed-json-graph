@@ -14,8 +14,9 @@ home {
     display: flex;
     flex-direction: column;
 
-    justify-content: center;
-    align-items: stretch;
+    // justify-content: center;
+    // align-items: stretch;
+
 
     tab-panel {
       panels {
@@ -30,104 +31,123 @@ home {
       }
 
       container {
-        flex: 0 1 auto;
-
+        flex: 1 1 auto;
         display: flex;
 
-        justify-content: center;
+        overflow: auto;
 
-        db {
-          flex: 1 1 auto;
+        filter-view {
+          flex: 0 1 auto;
+
+          display: flex;
+          flex-direction: column;
 
           justify-content: center;
 
-          overflow: auto;
+          filter-input {
+            filter {
+              display: inline-block;
 
-          word-break: break-all;
+              padding: 0.1em;
 
-          direction: rtl;
+              font-size: 0.7em;
 
-          .keccak-link {
-            text-decoration: underline;
-            color: #00e;
-
-            &:visited {
-              color: #00e;
+              border: solid 1px rgba(0, 0, 0, 0.5);
             }
           }
 
-          raw {
-            flex: 0 1 auto;
+          db {
+            flex: 1 1 auto;
 
-            display: flex;
-            flex-direction: column;
+            // justify-content: center;
 
-            align-items: center;
+            overflow: auto;
 
-            font-family: monospace;
+            word-break: break-all;
 
-            .label {
-              font-size: 0.35rem;
-              font-weight: bold;
-            }
+            direction: rtl;
 
-            &:hover {
-              background-color: rgba(127, 127, 127, 0.2);
-            }
-
-            table {
-              width: 100%;
-
+            & > * {
               direction: ltr;
             }
 
-            .info {
+            json {
+              word-break: break-word;
+            }
+
+            raw {
+              flex: 0 1 auto;
+
               display: flex;
+              flex-direction: column;
 
               align-items: center;
 
-              color-hash {
-                padding: 0.1em;
+              font-family: monospace;
 
-                font-size: 0.65em;
-                font-family: monospace;
+              .label {
+                font-size: 0.35rem;
+                font-weight: bold;
+              }
 
-                background-color: rgba(127, 127, 127, 0.25);
+              &:hover {
+                background-color: rgba(127, 127, 127, 0.2);
+              }
 
-                span {
-                  display: inline-block;
+              table {
+                width: 100%;
+
+                direction: ltr;
+              }
+
+              .info {
+                display: flex;
+
+                align-items: center;
+
+                color-hash {
+                  padding: 0.1em;
+
+                  font-size: 0.65em;
+                  font-family: monospace;
+
+                  background-color: rgba(127, 127, 127, 0.25);
+
+                  span {
+                    display: inline-block;
+                  }
                 }
+              }
+
+              data {
+                display: block;
+                flex: 1 1 auto;
               }
             }
 
-            data {
-              display: block;
-              flex: 1 1 auto;
-            }
-          }
+            hash-text-json {
+              flex: 0 1 auto;
 
-          hash-text-json {
-            flex: 0 1 auto;
+              display: flex;
+              flex-direction: column;
 
-            display: flex;
-            flex-direction: column;
+              &:hover {
+                background-color: rgba(127, 127, 127, 0.2);
+              }
 
-            &:hover {
-              background-color: rgba(127, 127, 127, 0.2);
-            }
+              hash {
+                font-size: 0.75em;
+                font-family: monospace;
 
-            hash {
-              font-size: 0.75em;
-              font-family: monospace;
+                background-color: rgba(127, 127, 127, 0.25);
+              }
 
-              background-color: rgba(127, 127, 127, 0.25);
-            }
+              json {
+                font-size: 0.75em;
+                font-family: monospace;
 
-            json {
-              font-size: 0.75em;
-              font-family: monospace;
-
-              background-color: rgba(127, 127, 127, 0.1);
+                background-color: rgba(127, 127, 127, 0.1);
+              }
             }
           }
         }
