@@ -116,8 +116,8 @@ function generateRoutes() {
 
   async function getLatest(ctx, next) // jshint ignore:line
   {
-    var start = Math.max(0, latest.length - max),
-        end = Math.max(0, Math.min(start + max, latest.length));
+    var start = 0,
+        end = Math.min(50, list.length);
 
     ctx.body = latest.slice(start, end).map(function (_ref) {
       var _ref2 = _slicedToArray(_ref, 2),
@@ -182,11 +182,11 @@ function generateRoutes() {
     var references = jsonKeyReferences[key];
     if (references) {
 
-      var list = references,
+      var _list = references,
           start = 0,
-          end = Math.min(50, list.length);
+          end = Math.min(50, _list.length);
 
-      ctx.res.write(list.slice(start, end).map(function (_ref5) {
+      ctx.res.write(_list.slice(start, end).map(function (_ref5) {
         var _ref6 = _slicedToArray(_ref5, 2),
             _ = _ref6[0],
             hash = _ref6[1];
@@ -3765,7 +3765,7 @@ module.exports = function isGeneratorFunction(fn) {
  */
 
 var crypto = require("crypto")
-
+  
 function Keygrip(keys, algorithm, encoding) {
   if (!algorithm) algorithm = "sha1";
   if (!encoding) encoding = "base64";

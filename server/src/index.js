@@ -86,8 +86,8 @@ function generateRoutes() {
 
   async function getLatest (ctx, next) // jshint ignore:line
   {
-    const start = Math.max(0, latest.length - max),
-          end = Math.max(0, Math.min(start + max, latest.length));
+    const start = 0,
+          end = Math.min(50, list.length);
 
     ctx.body = latest.slice(start, end).map(([_, hash]) => hash).join('\n');
 

@@ -6,7 +6,7 @@ import keccak from './lib/keccak';
 
 const parser = new DOMParser();
 
-const host = 'localhost:9999';
+const host = process.argv[2] || 'localhost:9999';
 
 const handlers = {
   'reddit': (result) => {
@@ -32,7 +32,7 @@ const handlers = {
       channel.item.forEach(({title, description, link, pubDate}) => {
         const hash = postData(JSON.stringify({
           title: title ? title[0] : undefined,
-          description: description ? description[0] : undefined,
+          description: description ? description[0].substring(0, description[0].indexOf('<')) : undefined,
           link: link ? link[0] : undefined,
           pubDate: pubDate ? pubDate[0] : undefined
         }));
@@ -53,6 +53,10 @@ const feeds = [{
   url: 'http://rss.cnn.com/rss/cnn_topstories.rss',
   delay: 5 * 60 * 1000,
   handler: handlers['cnn'] // jshint ignore:line
+},{
+  url: 'http://rss.cnn.com/rss/cnn_allpolitics.rss',
+  delay: 5 * 60 * 1000,
+  handler: handlers['cnn'] // jshint ignore:line
 }];
 
 feeds.forEach(({url, delay, handler}) => {
@@ -67,7 +71,7 @@ feeds.forEach(({url, delay, handler}) => {
       const obj = parseString(body, (err, result) => {
         if (err) return console.error('error parsing', url, err);
 
-        handler(result);
+        handler(result, url);
       });
     });
   }

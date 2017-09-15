@@ -208,7 +208,9 @@ class FilterView extends Component {
     return (this.subscription || Promise.resolve()).then(() => {
       const callback = hashes => {
         console.log('hashes', hashes);
+
         hashes
+          .reverse()
           .reduce((promise, hash) =>
             !hash && !token.canceled ? promise
                   : store.getData(hash)
@@ -216,29 +218,31 @@ class FilterView extends Component {
                          .then(() => store.getJsonReferences(hash))
                          .then(references => setState(state => {
                             state.references[hash] = references; // bad way to do this... will need to delete?
+                            state.items.unshift(hash);
                             console.log('references', references);
                             return state;
                          }))
           , Promise.resolve())
-          .then(() => setState(state => {
-            console.log('storing hashes in items');
-            state.items.splice(0);
-            state.items.unshift(...hashes);
-            return state;
-          }))
           .catch(error => console.log('big error', error));
       };
 
       return this.subscription = new Promise((resolve, reject) => {
         (filters[0] || '' !== '' ? store.getSubscribeJsonKey(filters[0], callback, token) : store.getSubscribeLatest(callback, token))
           .then(() => home.state.failCount = 0)
-          .then(() => {if (!token.canceled) home.subscribe.call(home, filters);})
+          .then(() => {
+            if (!token.canceled) {
+              state.items.splice(0);
+              home.subscribe.call(home, filters);
+            }
+          })
           .then(resolve)
           .catch(() => {
             console.log('subscription catch!', filters);
             if (!token.canceled) {
-              setTimeout(home.subscribe.bind(home, filters),
-                (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1))));
+              setTimeout(() => {
+                state.items.splice(0);
+                home.subscribe.bind(home, filters);
+              }, (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1))));
               resolve();
             }
             else reject();
