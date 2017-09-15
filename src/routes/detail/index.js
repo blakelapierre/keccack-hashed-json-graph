@@ -103,7 +103,7 @@ class View extends Component {
     return (
       <view>
         <info className={style[`loading-${loadingData}`]} onClick={() => route(`/${hashFnName}/${hash}`)}>
-          {typeRenderer[type]({hash, hashFnName, store, route, data, ...props})}
+          {typeRenderer[type]({hash, hashFnName, store, route, data, references, ...props})}
         </info>
         <TabPanel>
           {Object.keys(references).map(referenceKey => (

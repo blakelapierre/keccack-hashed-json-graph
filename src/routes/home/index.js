@@ -143,7 +143,7 @@ export default class Home extends Component {
             {hosts.map(host => (
               <container
                 header={`db (${host})`}>
-                <FilterView {...{store, ...props}} items={log} data={data} />
+                <FilterView {...{store, ...props}} data={data} />
               </container>
             ))}
             <container
@@ -167,57 +167,84 @@ export default class Home extends Component {
 class FilterView extends Component {
   state = {
     failCount: 0,
-    references: {}
+    filters: [],
+    references: {},
+    items: []
   }
 
   constructor(props) {
     super();
 
     this.state.data = props.data;
-    this.state.items = props.items;
     this.store = props.store;
+
+    this.setFilters();
   }
 
   setFilters(filters = []) {
-    this.setState(state => {
-      console.log('data', state.data);
-      state.items.splice(0);
-      return state;
-    });
-    // this.props.items.splice(0);
-    this.subscribe(filters);
+    console.log('setting filters', filters, this.state.filters);
+    if ((filters.length === 0 && this.state.filters.length === 0) ||
+      !listsEqual(filters, this.state.filters)) {
+      this.setState(state => {
+        console.log('data', state.data);
+        state.filters = filters;
+        state.items.splice(0);
+        return state;
+      });
+      console.log('setFilters', filters, this.state.filters);
+      this.subscribe(filters);
+    }
   }
 
   subscribe(filters) {
     const home = this,
-          store = this.store;
+          store = this.store,
+          token = (this.token = this.token || {});
+
+    if (this.token.cancel) this.token.cancel();
+
     console.log('subscribing', filters);
-    return (
-      store
-        // .getSubscribeLatest(hashes => {
-        .getSubscribeJsonKey(filters[0] || '', hashes => {
-          console.log('hashes', hashes);
-          hashes
-            .reduce((promise, hash) =>
-              !hash ? promise
-                    : store.getData(hash)
-                           .then(data => setState(store.transforms['addData'].bind(home, hash, data)))
-                           .then(() => store.getJsonReferences(hash))
-                           .then(references => setState(state => {
-                              state.references[hash] = references; // bad way to do this... will need to delete?
-                              console.log('references', references);
-                              return state;
-                           }))
-            , Promise.resolve())
-            .then(() => setState(state => {
-              state.items = hashes;
-              return state;
-            }))
-        })
-        .then(home.subscribe.bind(home, filters))
-        .then(() => home.state.failCount = 0)
-        .catch(() => setTimeout(home.subscribe.bind(home, filters), (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1)))))
-    );
+
+    return (this.subscription || Promise.resolve()).then(() => {
+      const callback = hashes => {
+        console.log('hashes', hashes);
+        hashes
+          .reduce((promise, hash) =>
+            !hash && !token.canceled ? promise
+                  : store.getData(hash)
+                         .then(data => setState(store.transforms['addData'].bind(home, hash, data)))
+                         .then(() => store.getJsonReferences(hash))
+                         .then(references => setState(state => {
+                            state.references[hash] = references; // bad way to do this... will need to delete?
+                            console.log('references', references);
+                            return state;
+                         }))
+          , Promise.resolve())
+          .then(() => setState(state => {
+            console.log('storing hashes in items');
+            state.items.splice(0);
+            state.items.unshift(...hashes);
+            return state;
+          }))
+          .catch(error => console.log('big error', error));
+      };
+
+      return this.subscription = new Promise((resolve, reject) => {
+        (filters[0] || '' !== '' ? store.getSubscribeJsonKey(filters[0], callback, token) : store.getSubscribeLatest(callback, token))
+          .then(() => home.state.failCount = 0)
+          .then(() => {if (!token.canceled) home.subscribe.call(home, filters);})
+          .then(resolve)
+          .catch(() => {
+            console.log('subscription catch!', filters);
+            if (!token.canceled) {
+              setTimeout(home.subscribe.bind(home, filters),
+                (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1))));
+              resolve();
+            }
+            else reject();
+          });
+        });
+    });
 
     function setState(state) {
       return home.setState.call(home, state);
@@ -236,6 +263,14 @@ class FilterView extends Component {
   }
 }
 
+function listsEqual(l1, l2) {
+  if (l1.length !== l2.length) return false;
+  for (let i = 0; i < l1.length; i++)
+    if (l1[0] !== l2[0])
+      return false;
+  return true;
+}
+
 class FilterInput extends Component {
   state = {
     filters: []
@@ -250,7 +285,7 @@ class FilterInput extends Component {
       return state;
     });
 
-    this.props.setFilters(this.state.filters);
+    this.props.setFilters(this.state.filters.slice());
   }
 
   removeFilter(filter) {
@@ -260,14 +295,15 @@ class FilterInput extends Component {
       return state;
     });
 
-    this.props.setFilters(this.state.filters);
+    console.log('filter removed', filter, this.state.filters);
+    this.props.setFilters(this.state.filters.slice());
   }
 
   render({}, {filters}) {
     return (
       <filter-input>
       {filters.map(filter => <filter><remove onClick={this.removeFilter.bind(this, filter)}>x</remove>{filter}</filter>)}
-        <input type="text" ref={el => this.input = el} value="" />
+        <input type="text" onKeyUp={({which}) => which === 13 ? this.addFilter() : undefined} ref={el => this.input = el} value="" />
         <button onClick={this.addFilter.bind(this)}>+</button>
       </filter-input>
     );
@@ -275,8 +311,15 @@ class FilterInput extends Component {
 }
 
 const DataView = ({data, items, route, ...props}) => (
-  <db>{items.map(hash => (data[hash] || []).map(d => <Json hash={hash} obj={JSON.parse(d)} onClick={() => route(`/keccak/${hash}`)} {...props} />))}</db>
+  <db>
+    {items.length}
+    {items.map(hash => (data[hash] || []).map(d => <Json hash={hash} obj={JSON.parse(d)} onClick={() => route(`/keccak/${hash}`)} {...props} />))}
+  </db>
   // <db>{items.map(hash => data[hash].map(d => <Raw hash={hash} data={d} onClick={() => route(`/keccak/${hash}`)} {...props} />))}</db>
+);
+
+const Data = () => (
+  <data></data>
 );
 
 // {

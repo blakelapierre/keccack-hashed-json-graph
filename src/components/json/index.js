@@ -10,13 +10,18 @@ import renderLinks from '../../util/renderLinks';
 export {Json};
 
 function Json (props) {
-  const {references, hash} = props;
+  const {references, hash} = props,
+        keys = references[hash] || {};
 
   return (
     <json onClick={props.onClick}>
       <KeyValues {...props} />
-      <ColorHash {...props} />
-      {JSON.stringify(references[hash])}
+      <lower>
+        <ColorHash {...props} />
+        <references>
+        {Object.keys(keys).map(key => <reference><key>{key}</key> <count>{keys[key]}</count></reference>)}
+        </references>
+      </lower>
     </json>
   );
 }

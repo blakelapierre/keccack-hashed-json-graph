@@ -15,13 +15,15 @@ json {
 
     flex-wrap: wrap;
 
+    // justify-content: space-between;
+
     // background-color: rgba(0, 0, 0, 0.1);
 
     key-value {
       display: flex;
       flex-direction: column;
 
-      padding: 0 0.3em;
+      margin: 0 0.3em;
 
       &:hover {
         background-color: rgba(0, 0, 0, 0.1);
@@ -53,7 +55,7 @@ json {
 
         display: flex;
 
-        align-items: center;
+        // align-items: flex-end;
         justify-content: center;
 
         a {
@@ -64,6 +66,20 @@ json {
       key-value {
         key {
           justify-content: center;
+        }
+      }
+    }
+  }
+
+  lower {
+    references {
+      reference {
+        font-size: 0.7em;
+
+        margin: 0 1em;
+
+        &:hover {
+          background-color: rgba(0, 0, 0, 0.1);
         }
       }
     }

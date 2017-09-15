@@ -146,9 +146,34 @@ const store = {
 
   getLatest: () => get(`http://${host}/${hashFnName}/latest`).then(latest => latest.split('\n')),
 
-  getSubscribeLatest: callback => stream(`http://${host}/${hashFnName}/subscribe/latest`, (data, state) => callback(data.split('\n'))),
+  getSubscribeLatest: (callback, token = {}) => stream(`http://${host}/${hashFnName}/subscribe/latest`, (data, state) => callback(data.split('\n')), token),
 
-  getSubscribeJsonKey: (key, callback) => stream(`http://${host}/${hashFnName}/subscribe/json/${key}`, (data, state) => callback(data.split('\n')))
+  // getSubscribeJsonKey: (key, callback) => stream(`http://${host}/${hashFnName}/subscribe/json/${key}`, (data, state) => callback(data.split('\n')))
+
+  getSubscribeJsonKey: (key, callback, token = {}) => {
+    const url = `http://${host}/${hashFnName}/subscribe/json/${key}`,
+          promise = store.pendingGetSubscribeJsonKey[key];
+
+    console.log('subscribing', url, promise);
+
+    if (promise) return promise;
+
+    return (store.pendingGetSubscribeJsonKey[key] = new Promise((resolve, reject) => {
+      stream(url, data => callback(data.split('\n')), token)
+        .then(response => {
+          console.log('stream done', response);
+          delete store.pendingGetSubscribeJsonKey[key];
+          resolve(response);
+        })
+        .catch(error => {
+          console.log('stream error', error);
+          delete store.pendingGetSubscribeJsonKey[key];
+          reject(error);
+        });
+    }));
+  },
+
+  pendingGetSubscribeJsonKey: {}
 };
 
 function lookupInStore(store, hash) {
@@ -189,7 +214,7 @@ function get(url) {
   });
 }
 
-function stream(url, callback) {
+function stream(url, callback, token = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -202,8 +227,18 @@ function stream(url, callback) {
 
       callback(newText);
     });
+    xhr.addEventListener('loadend', () => resolve());
     xhr.addEventListener('error', reject);
     xhr.addEventListener('timeout', reject);
+
+    token.cancel = () => {
+      console.log('canceling', url);
+      token.canceled = true;
+      xhr.abort();
+    };
+
+    token.canceled = false;
+
     xhr.send();
   });
 }

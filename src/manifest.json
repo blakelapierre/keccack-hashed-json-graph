@@ -1,6 +1,6 @@
 {
-  "name": "Preact PWA",
-  "short_name": "Preact PWA",
+  "name": "fact.company",
+  "short_name": "fact.company",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -16,5 +16,4 @@
     "type": "image/png",
     "sizes": "512x512"
   }]
-const Post = post => ({post});
-const PostWithAuthor = (post, author) => ({post, author});
+}
