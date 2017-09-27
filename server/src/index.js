@@ -22,7 +22,7 @@ const keccakStore = {},
       latestBuffer = new Buffer(100 * (2 + 64 + new Date().getTime().toString().length)),
       latestRead = fs.readSync(latestFile, latestBuffer, 0, Math.min(latestBuffer.length, latestStat.size), Math.min(0, latestStat.size - Math.min(latestBuffer.length, latestStat.size))),
       latest = latestRead > 0 ? latestBuffer.toString().split('\n').slice(0, -1).reverse().map(line => line.split(' ')) : [];
-console.log(latest);
+
 const port = process.env.port || 9999;
 
 const app = new Koa(),
@@ -30,21 +30,17 @@ const app = new Koa(),
 
 attachRoutes(router, generateRoutes(), 'keccak');
 
-app.use((ctx, next) => {
-  ctx.response.set('Access-Control-Allow-Origin', '*');
-  return next();
-});
-
-app.use((ctx, next) => {
-  return next();
-});
-
+app.use(allowAllOrigins);
 app.use(router.middleware());
 
 app.listen(port);
 
 console.log('HTTP server listing on port', port);
 
+function allowAllOrigins(ctx, next) {
+  ctx.response.set('Access-Control-Allow-Origin', '*');
+  return next();
+}
 
 function attachRoutes(router, allRoutes, hashFnName) {
   for (let method in allRoutes) {
@@ -65,11 +61,15 @@ function generateRoutes() {
     'get': {
       'all': getAll,
       'latest': getLatest,
+      'json/:key': getJsonKey,
+      'json/:key/:value': getJsonKeyValue, 
       'subscribe/latest': getSubscribeLatest,
       'subscribe/json/:key': getSubscribeJsonKey,
+      'subscribe/json/:key/:value': getSubscribeJsonKeyValue,
       ':hash': getHash,
       ':hash/json': getHashJson,
-      ':hash/json/:key': getHashJsonKey
+      ':hash/json/:key': getHashJsonKey //,
+      // ':hash/new/json/:key': getHashNewJsonKey
     },
     'post': {
       '': postLookup,
@@ -100,11 +100,6 @@ function generateRoutes() {
     ctx.response.set('Cache-Control', 'no-cache');
     ctx.status = 200;
 
-    const start = 0,
-          end = Math.min(50, latest.length);
-
-    ctx.res.write(latest.slice(start, end).map(([_, hash]) => hash).join('\n'));
-
     let count = 0,
         send = true;
 
@@ -124,10 +119,10 @@ function generateRoutes() {
     return next();
   }
 
-  async function getSubscribeJsonKey(ctx, next) // jshint ignore:line
+  async function getJsonKey(ctx, next) // jshint ignore:line
   {
     const {response, params: {key}} = ctx;
-
+    
     response.set('Content-Type', 'application/octet-stream');
     response.set('Cache-Control', 'no-cache');
 
@@ -142,6 +137,27 @@ function generateRoutes() {
 
       ctx.res.write(list.slice(start, end).map(([_, hash]) => hash).join('\n'));
     }
+
+    return next();
+  }
+
+  async function getJsonKeyValue(ctx, next) // jshint ignore:line
+  {
+    ctx.status = 500;
+
+    ctx.res.write('not implemented');
+
+    return next();
+  }
+
+  async function getSubscribeJsonKey(ctx, next) // jshint ignore:line
+  {
+    const {response, params: {key}} = ctx;
+
+    response.set('Content-Type', 'application/octet-stream');
+    response.set('Cache-Control', 'no-cache');
+
+    ctx.status = 200;
 
     let count = 0,
         send = true;
@@ -158,6 +174,48 @@ function generateRoutes() {
     }
 
     console.log('done with subscribe');
+
+    return next();
+  }
+
+  async function getSubscribeJsonKey(ctx, next) // jshint ignore:line
+  {
+    const {response, params: {key}} = ctx;
+
+    response.set('Content-Type', 'application/octet-stream');
+    response.set('Cache-Control', 'no-cache');
+
+    ctx.status = 200;
+
+    let count = 0,
+        send = true;
+
+    console.log(key, 'subscriber');
+
+    ctx.res.on('close', () => {send = false; console.log('subscriber left');});
+
+    // while (++count < 50)
+    while (send) {
+      const data = await getJsonKeyPromise(key); // jshint ignore:line
+      console.log('sending json key', data);
+      if (send) ctx.res.write(data);
+    }
+
+    console.log('done with subscribe');
+
+    return next();
+  }
+
+  async function getSubscribeJsonKeyValue(ctx, next) // jshint ignore:line
+  {
+    const {response, params: {key}} = ctx;
+
+    response.set('Content-Type', 'application/octet-stream');
+    response.set('Cache-Control', 'no-cache');
+
+    ctx.status = 200;
+
+    ctx.res.write('not implemented!');
 
     return next();
   }
@@ -224,10 +282,7 @@ function generateRoutes() {
       const {req, response} = ctx;
 
       req.on('data', data => {
-        console.log('lookup', data, response);
-
         response.body = data.toString('utf16le').split('\n').reduce((body, hash) => {
-          console.log(hash, body);
           return `${body}${hash} ${keccakStore[hash]}\n`;
         }, response.body);
         response.status = 200;
@@ -241,11 +296,9 @@ function generateRoutes() {
 
   async function postHash (ctx, next) // jshint ignore:line
   {
-    const {hash} = ctx.params;
+    const {response, request, req, params: {hash}} = ctx;
 
     console.log(hash, 'posting');
-
-    const {response, request, req} = ctx;
 
     await readAndStore(req, response); // jshint ignore:line
 
@@ -261,12 +314,13 @@ function generateRoutes() {
         req.on('end', endHandler);
 
         function dataHandler(data) {
-          console.log('data', data);
           totalLength += data.length;
 
           if (totalLength > maxLength) {
-            req.off('data', dataHandler);
-            req.off('end', endHandler);
+            if (req) {
+              req.off('data', dataHandler);
+              req.off('end', endHandler);
+            }
             reject(`Too large! maxLength = ${maxLength}`);
           }
 
@@ -287,6 +341,7 @@ function generateRoutes() {
                 resolve();
               })
               .catch(error => {
+                if (error === 'duplicate') response.status = 400;
                 console.log('error', error);
                 resolve();
               });
@@ -492,6 +547,28 @@ function getJsonKeyPromise(key) {
   }
 
   return keyPromise;
+}
+
+let jsonKeyValuePromises = {};
+function getJsonKeyValuePromise(key, value) {
+  let keyValuePromise = (jsonKeyValuePromises[key] = jsonKeyValuePromises[key] || {})[value];
+
+  if (!keyValuePromise) {
+    const temp = {};
+    keyValuePromise = new Promise(function(resolve, reject) {
+      temp.resolve = resolve;
+      temp.reject = reject;
+    });
+    keyValuePromise.resolve = temp.resolve;
+    keyValuePromise.reject = temp.reject;
+    keyValuePromise.buffer = [];
+
+    jsonKeyValuePromises[key][value] = keyValuePromise;
+
+    console.log('jsonKeyPromise crated');
+  }
+
+  return keyValuePromise;
 }
 
 function scheduleLatestUpdate(hash) {

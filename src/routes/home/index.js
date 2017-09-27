@@ -80,8 +80,8 @@ export default class Home extends Component {
                                setState(store.transforms['addData'].bind(home, hash, data)))
               , Promise.resolve())
           })
-          .then(subscribe)
           .then(() => home.state.failCount = 0)
+          .then(subscribe)
           .catch(() => setTimeout(subscribe, (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1)))))
       );
     }
@@ -231,18 +231,21 @@ class FilterView extends Component {
           .then(() => home.state.failCount = 0)
           .then(() => {
             if (!token.canceled) {
-              state.items.splice(0);
+              home.state.items.splice(0);
               home.subscribe.call(home, filters);
             }
           })
           .then(resolve)
           .catch(() => {
-            console.log('subscription catch!', filters);
+            console.log('subscription catch!', filters, token, home);
             if (!token.canceled) {
+              const delay = (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1)));
+              console.log(delay);
               setTimeout(() => {
-                state.items.splice(0);
-                home.subscribe.bind(home, filters);
-              }, (home.state.delay = 100 * Math.pow(2, (home.state.failCount = (home.state.failCount || 0) + 1))));
+                console.log('re-subbing')
+                home.state.items.splice(0);
+                home.subscribe.call(home, filters);
+              }, delay);
               resolve();
             }
             else reject();

@@ -109,6 +109,27 @@ function tryClassifyJSON(hash, data, jsonReferences) {
   catch (e) {}
 }
 
+const sayPostCount = (
+  counts => 
+    id => {
+      console.log('say', id);
+      
+      const data = (counts[id] = counts[id] || {count: 0, utterance: new SpeechSynthesisUtterance()});
+
+      if (data.count === 0) {
+        window.speechSynthesis.speak(data.utterance);
+
+        data.utterance.addEventListener('start', () => delete counts[id]);
+        data.utterance.rate = 1.5;
+      }
+      
+      data.count++;
+
+      data.utterance.text = `${data.count} ${id} post${data.count > 1 ? 's' : ''}`;
+      console.log(data.utterance.text);
+    }
+)({});
+
 const store = {
   hosts,
   transforms,
@@ -137,6 +158,21 @@ const store = {
             .catch(() =>
               lookupInServer(hash)
                 .then(data => storeData(hash, data).then(() => data))
+                .then(data => {
+                  try {
+                    const object = JSON.parse(data);
+
+                    console.log('cl', object);
+                    if (object['source'] === 'yours.org') sayPostCount('yours.org');
+                    if (object['subreddit']) sayPostCount(`subreddit ${object['subreddit']}`);
+                    if (object['channel']) sayPostCount(`${channel}`);
+                  }
+                  catch (e) {
+
+                  }
+
+                  return data;
+                })
                 .then(resolve)
                 .catch(reject)))),
 
@@ -173,7 +209,32 @@ const store = {
     }));
   },
 
-  pendingGetSubscribeJsonKey: {}
+  pendingGetSubscribeJsonKey: {},
+
+  getSubscribeJsonKeyValue: (key, value, callback, token = {}) => {
+    const url = `http://${host}/${hashFnName}/subscribe/json/${key}/${value}`,
+          promise = (store.pendingGetSubscribeJsonKeyValue[key] = store.pendingGetSubscribeJsonKeyValue[key] || {})[value];
+
+    console.log('subscribing', url, promise);
+
+    if (promise) return promise;
+
+    return (store.pendingGetSubscribeJsonKeyValue[key][value] = new Promise((resolve, reject) => {
+      stream(url, data => callback(data.split('\n')), token)
+        .then(response => {
+          console.log('stream done', response);
+          delete store.pendingGetSubscribeJsonKeyValue[key][value];
+          resolve(response);
+        })
+        .catch(error => {
+          console.log('stream error', error);
+          delete store.pendingGetSubscribeJsonKeyValue[key][value];
+          reject(error);
+        });
+    }));
+  },
+
+  pendingGetSubscribeJsonKeyValue: {}
 };
 
 function lookupInStore(store, hash) {
@@ -227,7 +288,7 @@ function stream(url, callback, token = {}) {
 
       callback(newText);
     });
-    xhr.addEventListener('loadend', () => resolve());
+    xhr.addEventListener('loadend', resolve);
     xhr.addEventListener('error', reject);
     xhr.addEventListener('timeout', reject);
 
