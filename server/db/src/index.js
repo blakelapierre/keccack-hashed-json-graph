@@ -9,11 +9,12 @@ import Router from 'koa-trie-router';
 
 import keccak from './keccak';
 
-const hashFnName = 'keccak';
+const hashFn = keccak,
+      hashFnName = 'keccak';
 
 if (!fs.existsSync(hashFnName)) fs.mkdirSync(hashFnName);
 
-const keccakStore = {},
+const hashStore = {},
       jsonHashReferences = {},
       jsonKeyReferences = {},
       listeners = {},
@@ -28,7 +29,7 @@ const port = process.env.port || 9999;
 const app = new Koa(),
       router = new Router();
 
-attachRoutes(router, generateRoutes(), 'keccak');
+attachRoutes(router, generateKeccakRoutes(), 'keccak');
 
 app.use(allowAllOrigins);
 app.use(router.middleware());
@@ -53,7 +54,7 @@ function attachRoutes(router, allRoutes, hashFnName) {
   }
 }
 
-function generateRoutes() {
+function generateKeccakRoutes() {
   const max = 50;
   const maxLength = 100000;
 
@@ -72,14 +73,15 @@ function generateRoutes() {
       // ':hash/new/json/:key': getHashNewJsonKey
     },
     'post': {
-      '': postLookup,
+      '': postRoot,
+      'lookup': postLookup,
       ':hash': postHash
     }
   });
 
   async function getAll (ctx, next) // jshint ignore:line
   {
-    ctx.body = keccakStore; // uh, wut?
+    ctx.body = hashStore; // uh, wut?
 
     return next();
   }
@@ -276,6 +278,60 @@ function generateRoutes() {
     return next();
   }
 
+  async function postRoot(ctx, next) // jshint ignore:line
+  {
+    const {response, request, req} = ctx;
+
+    await readAndStore(req, response); // jshint ignore:line
+
+    return next();
+
+    function readAndStore(req, response) {
+      return new Promise((resolve, reject) => {
+        const buffer = [];
+
+        let totalLength = 0;
+
+        req.on('data', dataHandler);
+        req.on('end', endHandler);
+
+        function dataHandler(data) {
+          totalLength += data.length;
+
+          if (totalLength > maxLength) {
+            if (req) {
+              req.off('data', dataHandler);
+              req.off('end', endHandler);
+            }
+            return reject(`Too large! maxLength = ${maxLength}`);
+          }
+
+          buffer.push(data);
+        }
+
+        function endHandler() {
+          const data = Buffer.concat(buffer).toString('utf8'),
+                hash = hashFn(data);
+
+          addToStore(hashStore, hash, data)
+            .then(() => addToLatest(hash))
+            .then(() => addToFileSystem(hash, data)) // should probably just queue a write to file system
+            .then(() => scheduleUpdateNotifications({listeners}, classify(hash, data), data))
+            .then(() => {
+              response.status = 200;
+              console.log('stored', data);
+              resolve();
+            })
+            .catch(error => {
+              if (error === 'duplicate') response.status = 400;
+              console.log('error', error);
+              resolve();
+            });
+        }
+      });
+    }
+  }
+
   async function postLookup (ctx, next) // jshint ignore:line
   {
     await new Promise((resolve, reject) => { // jshint ignore:line
@@ -283,7 +339,7 @@ function generateRoutes() {
 
       req.on('data', data => {
         response.body = data.toString('utf16le').split('\n').reduce((body, hash) => {
-          return `${body}${hash} ${keccakStore[hash]}\n`;
+          return `${body}${hash} ${hashStore[hash]}\n`;
         }, response.body);
         response.status = 200;
       });
@@ -330,8 +386,8 @@ function generateRoutes() {
         function endHandler() {
           const data = Buffer.concat(buffer).toString('utf8');
 
-          if (keccak(data) === hash) {
-            addToStore(keccakStore, hash, data)
+          if (hashFn(data) === hash) {
+            addToStore(hashStore, hash, data)
               .then(() => addToLatest(hash))
               .then(() => addToFileSystem(hash, data)) // should probably just queue a write to file system
               .then(() => scheduleUpdateNotifications({listeners}, classify(hash, data), data))
@@ -357,7 +413,7 @@ function generateRoutes() {
 }
 
 function lookupHash(type, hash) {
-  const store = type === 'keccak' ? keccakStore : new Error('no other stores!');
+  const store = type === 'keccak' ? hashStore : new Error('no other stores!');
 
   return new Promise((resolve, reject) => {
     const bucket = store[hash];
@@ -372,14 +428,12 @@ function lookupHash(type, hash) {
 
 function addToStore(store, hash, data) {
   return new Promise((resolve, reject) => {
-    const bucket = (keccakStore[hash] = keccakStore[hash] || []);
-console.log('add', bucket, data);
-    for (let i = 0; i < bucket.length; i++) {
-      if (bucket[i] === data) {
+    const bucket = (store[hash] = store[hash] || []);
+    
+    for (let i = 0; i < bucket.length; i++)
+      if (bucket[i] === data)
         return reject('duplicate');
-      }
-    }
-console.log('adding');
+
     bucket.push(data);
     resolve();
   });
